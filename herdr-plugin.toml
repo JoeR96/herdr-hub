@@ -39,3 +39,17 @@ placement = "popup"
 width = "80%"
 height = 26
 command = ["node", "src/ui/menu.ts"]
+
+[[actions]]
+id = "new-worktree"
+title = "herdr hub: new worktree + Claude"
+contexts = ["workspace"]
+command = ["node", "src/open-pane.ts", "new-worktree"]
+
+[[panes]]
+id = "new-worktree"
+title = "new worktree"
+placement = "popup"
+width = "70%"
+height = 9
+command = ["node", "src/ui/new-worktree.ts"]
