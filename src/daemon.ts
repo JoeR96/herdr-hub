@@ -7,7 +7,7 @@ import type { GitHubRepo } from "./model/git-parse.ts";
 import type { SpaceKind } from "./model/classify.ts";
 import { buildLines, toTokens } from "./model/lines.ts";
 import { configDir, loadConfig } from "./config.ts";
-import { acquirePidLock, log, readCache, releasePidLock, statePaths, writeCache } from "./state.ts";
+import { acquirePidLock, heartbeat, log, readCache, readPidLock, releasePidLock, statePaths, writeCache } from "./state.ts";
 import { spaceKind } from "./locate.ts";
 
 const paths = statePaths();
@@ -102,6 +102,9 @@ function waitForTrigger(ms: number): Promise<void> {
 async function main(): Promise<void> {
   log(paths, `daemon started (pid ${process.pid})`);
   for (;;) {
+    // if another daemon has taken the lock (ours went quiet during a long tick), it wins
+    if (readPidLock(paths.daemonLock) !== process.pid) { log(paths, `daemon ${process.pid} lost its lock, exiting`); process.exit(0); }
+    heartbeat(paths.daemonLock);
     try {
       await tick();
       failures = 0;

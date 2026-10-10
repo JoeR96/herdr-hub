@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { statePaths, acquirePidLock, releasePidLock, readPidLock, withFileLock, log, lastLogLines, readCache, writeCache } from "../src/state.ts";
+import { statePaths, acquirePidLock, lockHeld, releasePidLock, readPidLock, withFileLock, log, lastLogLines, readCache, writeCache } from "../src/state.ts";
 
 const fresh = () => statePaths(mkdtempSync(join(tmpdir(), "hub-state-")));
 
@@ -21,6 +21,35 @@ test("a pid lock held by a live process blocks; a dead one is taken over", () =>
   writeFileSync(p.daemonLock, String(process.pid));
   releasePidLock(p.daemonLock);
   assert.equal(existsSync(p.daemonLock), false);
+});
+
+test("a lock whose heartbeat has gone quiet is taken over even if its pid now belongs to someone else", () => {
+  const p = fresh();
+  writeFileSync(p.daemonLock, String(process.ppid)); // a live process that isn't the daemon (pid reused after a reboot)
+  const old = (Date.now() - 10 * 60_000) / 1000;
+  utimesSync(p.daemonLock, old, old);
+  assert.equal(lockHeld(p.daemonLock, 5 * 60_000), false);
+  assert.equal(acquirePidLock(p.daemonLock, 5 * 60_000), true);
+  assert.equal(lockHeld(p.daemonLock, 5 * 60_000), true);
+});
+
+test("only one of several processes racing for the daemon lock wins", async () => {
+  const p = fresh();
+  const stateUrl = new URL("../src/state.ts", import.meta.url).href;
+  const startAt = Date.now() + 1500; // every process spins until the same instant, then grabs
+  const script = `import { acquirePidLock } from ${JSON.stringify(stateUrl)};
+    while (Date.now() < ${startAt}) {}
+    const won = acquirePidLock(${JSON.stringify(p.daemonLock)});
+    process.stdout.write(won ? "won" : "lost");
+    setTimeout(() => {}, 1500);`;
+  const runs = Array.from({ length: 6 }, () => new Promise<string>((res) => {
+    const c = spawn(process.execPath, ["--input-type=module", "-e", script]);
+    let out = "";
+    c.stdout.on("data", (d) => { out += d; });
+    c.on("exit", () => res(out));
+  }));
+  const results = await Promise.all(runs);
+  assert.equal(results.filter((r) => r === "won").length, 1, results.join(","));
 });
 
 test("withFileLock runs callers one at a time", async () => {

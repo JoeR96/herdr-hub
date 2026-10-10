@@ -4,7 +4,7 @@ import { run } from "../io/exec.ts";
 import { Herdr } from "../io/herdr.ts";
 import { ghStatus } from "../io/github.ts";
 import { configDir, loadConfig } from "../config.ts";
-import { pidAlive, readPidLock, statePaths } from "../state.ts";
+import { lockHeld, readPidLock, statePaths } from "../state.ts";
 import { showMessage } from "./term.ts";
 
 export interface Check { name: string; ok: boolean; detail: string }
@@ -51,8 +51,10 @@ export async function runChecks(): Promise<Check[]> {
   const { errors } = loadConfig(configDir());
   checks.push({ name: "config.json", ok: !errors.length, detail: errors.length ? errors.join("; ") : "ok" });
 
-  const pid = readPidLock(statePaths().daemonLock);
-  checks.push({ name: "sidebar updater", ok: !!pid && pidAlive(pid), detail: pid && pidAlive(pid) ? `running (pid ${pid})` : "not running: use Refresh now" });
+  const lock = statePaths().daemonLock;
+  const pid = readPidLock(lock);
+  const alive = lockHeld(lock);
+  checks.push({ name: "sidebar updater", ok: alive, detail: alive ? `running (pid ${pid})` : "not running: use Refresh now" });
   return checks;
 }
 

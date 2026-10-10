@@ -1,4 +1,4 @@
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RepoData } from "./model/github-map.ts";
@@ -41,11 +41,41 @@ export function readPidLock(file: string): number | null {
   } catch { return null; }
 }
 
-export function acquirePidLock(file: string): boolean {
+// The daemon rewrites its lock every tick. A lock that has gone quiet is dead even if its pid is alive:
+// after a reboot or a killed process, Windows soon hands the same pid to something else.
+export const LOCK_MAX_AGE = 5 * 60_000;
+
+export function lockHeld(file: string, maxAgeMs = LOCK_MAX_AGE): boolean {
   const pid = readPidLock(file);
-  if (pid && pid !== process.pid && pidAlive(pid)) return false;
-  writeFileSync(file, String(process.pid));
-  return true;
+  if (!pid || !pidAlive(pid)) return false;
+  try { return Date.now() - statSync(file).mtimeMs < maxAgeMs; } catch { return false; }
+}
+
+// Creating the file is the claim (exclusive create), so two daemons starting together can't both win.
+// A dead or silent lock is moved aside with a rename, which only one of several racers can do.
+export function acquirePidLock(file: string, maxAgeMs = LOCK_MAX_AGE): boolean {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const fd = openSync(file, "wx");
+      writeSync(fd, String(process.pid));
+      closeSync(fd);
+      return true;
+    } catch (e) {
+      if ((e as { code?: string }).code !== "EEXIST") throw e;
+    }
+    const pid = readPidLock(file);
+    if (pid === process.pid) { heartbeat(file); return true; }
+    if (lockHeld(file, maxAgeMs)) return false;
+    // another process has just created the file and not written its pid yet
+    try { if (pid === null && Date.now() - statSync(file).mtimeMs < 2000) return false; } catch { continue; }
+    try { renameSync(file, `${file}.${process.pid}.stale`); unlinkSync(`${file}.${process.pid}.stale`); } catch { /* someone else moved it */ }
+  }
+  return false;
+}
+
+// The daemon calls this every tick; an old timestamp is how others know it died.
+export function heartbeat(file: string): void {
+  if (readPidLock(file) === process.pid) writeFileSync(file, String(process.pid));
 }
 
 export function releasePidLock(file: string): void {
