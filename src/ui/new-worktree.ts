@@ -8,6 +8,7 @@ import { log, statePaths } from "../state.ts";
 import { spaceKind } from "../locate.ts";
 import { classify } from "../model/classify.ts";
 import { planWorktree } from "../model/naming.ts";
+import { isEntry } from "../entry.ts";
 import { pickFromList, printScreen, promptText, readContext, showMessage } from "./term.ts";
 
 interface Job { repo: string; branch: string; label: string; agentName: string }
@@ -73,7 +74,7 @@ async function worker(job: Job): Promise<void> {
   }
 }
 
-if (import.meta.main) {
+if (isEntry(import.meta.url)) {
   if (process.argv[2] === "--worker") await worker(JSON.parse(process.argv[3]));
   else await runNewWorktree(readContext().workspace_id);
 }
