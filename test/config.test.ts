@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseConfig, defaults, loadConfig, saveConfig, togglePin } from "../src/config.ts";
+import { parseConfig, defaults, loadConfig, saveConfig, savePinned, togglePin } from "../src/config.ts";
 
 test("missing or empty config gives the defaults with no errors", () => {
   assert.deepEqual(parseConfig(null), { config: defaults(), errors: [] });
@@ -42,6 +42,23 @@ test("invalid JSON is reported, not thrown", () => {
   const { config, errors } = parseConfig("{ nope");
   assert.deepEqual(config, defaults());
   assert.match(errors[0], /not valid JSON/);
+});
+
+test("savePinned changes only the pinned list and keeps everything else in the file", () => {
+  const dir = mkdtempSync(join(tmpdir(), "hub-pin-"));
+  writeFileSync(join(dir, "config.json"), JSON.stringify({ pinned: [{ label: "a", path: "/a" }], refresh: { localSeconds: 1 }, myNote: "keep me" }));
+  savePinned(dir, [{ label: "a", path: "/a" }, { label: "b", path: "/b" }]);
+  const raw = JSON.parse(readFileSync(join(dir, "config.json"), "utf8"));
+  assert.deepEqual(raw.pinned, [{ label: "a", path: "/a" }, { label: "b", path: "/b" }]);
+  assert.equal(raw.refresh.localSeconds, 1, "an invalid value the user is still editing must not be replaced");
+  assert.equal(raw.myNote, "keep me");
+});
+
+test("savePinned refuses to overwrite a config.json that isn't valid JSON", () => {
+  const dir = mkdtempSync(join(tmpdir(), "hub-pin-"));
+  writeFileSync(join(dir, "config.json"), "{ half typed");
+  assert.throws(() => savePinned(dir, [{ label: "b", path: "/b" }]), /not valid JSON/);
+  assert.equal(readFileSync(join(dir, "config.json"), "utf8"), "{ half typed");
 });
 
 test("save then load round-trips, and togglePin adds then removes", () => {

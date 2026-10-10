@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { Herdr } from "../io/herdr.ts";
 import { githubRepo, status } from "../io/git.ts";
 import { openTarget } from "../io/open.ts";
-import { configDir, configFile, loadConfig, saveConfig, togglePin } from "../config.ts";
+import { configDir, configFile, loadConfig, saveConfig, savePinned, togglePin } from "../config.ts";
 import { lastLogLines, readCache, statePaths, touchTrigger } from "../state.ts";
 import { ensureDaemon } from "../daemon-control.ts";
 import { spaceKind } from "../locate.ts";
@@ -54,7 +54,10 @@ switch (choice.id) {
   case "pin": {
     const path = kind.kind === "other" ? (snap.panes.find((p) => p.workspace_id === ws.workspace_id)?.cwd ?? ctx.workspace_cwd ?? "") : kind.repoRoot;
     const r = togglePin(config, ws.label, path.replace(/\\/g, "/"));
-    saveConfig(configDir(), r.config);
+    try { savePinned(configDir(), r.config.pinned); } catch (e) {
+      await showMessage("Not saved", [(e as Error).message, "Fix config.json (menu → Open config file) and try again."]);
+      break;
+    }
     await showMessage(r.pinned ? "Pinned" : "Unpinned", [r.pinned ? `"${ws.label}" will always stay open.` : `"${ws.label}" can be closed for good now.`]);
     break;
   }

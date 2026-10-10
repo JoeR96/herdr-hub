@@ -82,6 +82,21 @@ export function saveConfig(dir: string, cfg: Config): void {
   writeFileSync(configFile(dir), JSON.stringify(cfg, null, 2) + "\n");
 }
 
+// Rewrites only "pinned" in the user's own file, so values they're mid-way through editing (even invalid
+// ones) survive. Refuses to touch a file that isn't valid JSON rather than replacing it with defaults.
+export function savePinned(dir: string, pinned: Pinned[]): void {
+  const file = configFile(dir);
+  let raw: Record<string, unknown> = {};
+  if (existsSync(file)) {
+    const text = readFileSync(file, "utf8");
+    if (text.trim()) {
+      try { raw = JSON.parse(text); } catch (e) { throw new Error(`config.json is not valid JSON, so it was left alone: ${(e as Error).message}`); }
+    }
+  }
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(file, JSON.stringify({ ...raw, pinned }, null, 2) + "\n");
+}
+
 export function togglePin(cfg: Config, label: string, path: string): { config: Config; pinned: boolean } {
   const has = cfg.pinned.some((p) => p.label === label);
   const pinned = has ? cfg.pinned.filter((p) => p.label !== label) : [...cfg.pinned, { label, path }];
