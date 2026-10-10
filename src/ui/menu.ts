@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { Herdr } from "../io/herdr.ts";
 import { githubRepo, status } from "../io/git.ts";
-import { openTarget } from "../io/open.ts";
+import { isWebUrl, openTarget, openUrl } from "../io/open.ts";
 import { configDir, configFile, loadConfig, saveConfig, savePinned, togglePin } from "../config.ts";
 import { lastLogLines, readCache, statePaths, touchTrigger } from "../state.ts";
 import { ensureDaemon } from "../daemon-control.ts";
@@ -28,7 +28,8 @@ if (kind.kind !== "other") {
   if (repo) {
     info.repoUrl = `https://github.com/${repo.owner}/${repo.name}`;
     const data = readCache(paths).repos[`${repo.owner}/${repo.name}`]?.data;
-    if (kind.kind === "main") info.releaseUrl = data?.release?.url ?? null;
+    const releaseUrl = data?.release?.url ?? null;
+    if (kind.kind === "main" && releaseUrl && isWebUrl(releaseUrl)) info.releaseUrl = releaseUrl;
     const branch = (await status(kind.folder))?.branch;
     const pr = kind.kind === "worktree" && branch ? data?.prs.find((p) => p.headRefName === branch) : undefined;
     if (pr) { info.prNumber = pr.number; info.prUrl = pr.url; }
@@ -40,9 +41,9 @@ if (choice.kind !== "select") process.exit(0);
 
 switch (choice.id) {
   case "new-worktree": await runNewWorktree(ws.workspace_id); break;
-  case "open-pr": await openTarget(info.prUrl!); break;
-  case "open-release": await openTarget(info.releaseUrl!); break;
-  case "open-repo": await openTarget(info.repoUrl!); break;
+  case "open-pr": await openUrl(info.prUrl!); break;
+  case "open-release": await openUrl(info.releaseUrl!); break;
+  case "open-repo": await openUrl(info.repoUrl!); break;
   case "cleanup": await runCleanupUi(); break;
   case "refresh": {
     touchTrigger(paths);
