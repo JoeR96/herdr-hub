@@ -57,7 +57,8 @@ One JSON file, `config.json`, in the plugin's config folder (`herdr plugin confi
   "refresh": { "localSeconds": 15, "githubSeconds": 180 },
   "cleanup": { "staleDays": 30 },
   "releaseWorkflowPattern": "release|deploy|publish",
-  "newWorktree": { "branchPrefix": "feature/" }
+  "newWorktree": { "branchPrefix": "feature/" },
+  "indent": "blank"
 }
 ```
 
@@ -99,7 +100,7 @@ herdr only records repo info after a worktree command has touched a space, so th
 
 ## Sidebar lines
 
-The plugin writes up to four tokens per space (`$hub1`..`$hub4`). An unset token hides its row. Lines are indented by the plugin itself: 4 spaces under a main space, and 6 under a worktree space so they sit under herdr's own worktree indent. If herdr strips leading spaces, the indent falls back to a leading `│ ` glyph. This is verified on a real herdr early in the build.
+The plugin writes up to four tokens per space (`$hub1`..`$hub4`). An unset token hides its row. Lines are indented by the plugin itself: 4 spaces under a main space, and 6 under a worktree space so they sit under herdr's own worktree indent. herdr trims ordinary leading whitespace (checked 2026-10-10), so the indent uses U+2800 (Braille blank), which survives and normally renders empty. If a font draws it visibly, `"indent": "bar"` switches to a leading `│ ` instead.
 
 Main space:
 
@@ -185,7 +186,7 @@ A popup list for the focused space. Arrow keys move, enter runs, typing filters,
   - Open config file
   - Check setup: Node version, git, gh installed and signed in, herdr version, the config.toml snippet present
 
-GitHub links open with `gh browse` / `gh pr view --web`. Other URLs open with `start` (Windows), `open` (macOS) or `xdg-open` (Linux).
+Links open with the platform opener, never through a shell: `rundll32 url.dll,FileProtocolHandler` (Windows), `open` (macOS), `xdg-open` (Linux).
 
 ## Clean up workstreams
 
