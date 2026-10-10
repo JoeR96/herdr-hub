@@ -1,0 +1,154 @@
+# herdr hub
+
+A [herdr](https://herdr.dev) plugin that turns herdr into a home base for all your projects.
+
+- **Pinned spaces.** The projects you choose always have a space, even with nothing running in them. Close one and it comes back.
+- **Status in the sidebar.** Each project space shows its branch and its latest release or deploy. Each worktree space shows its agent, its branch and its pull request with check results.
+- **New worktree + Claude on one key.** Type a name and you get a new branch, a worktree, a space for it and Claude Code running inside.
+- **A menu of utilities.** Open the PR, the release or the repo in your browser, clean up finished workstreams, pin a space, and check your setup.
+
+It works on Windows, macOS and Linux, in any terminal herdr runs in.
+
+## What you need
+
+- herdr 0.9.0 or newer
+- Node 24 or newer (the plugin runs its TypeScript files directly, so there is nothing to build)
+- git
+- The [GitHub CLI](https://cli.github.com), signed in with `gh auth login`
+
+Without the GitHub CLI the local parts still work: branch, agent and pinned spaces.
+
+## Install
+
+```sh
+herdr plugin install JoeR96/herdr-hub
+```
+
+## Set up herdr's config.toml
+
+A plugin can't edit herdr's config, so add these yourself. Run `herdr config check` to find the file.
+
+The plugin writes up to four lines under each space. Show them by replacing your `[ui.sidebar.spaces]` rows:
+
+```toml
+[ui.sidebar.spaces]
+rows = [
+  ["state_icon", "workspace", { token = "state_text", rules = [{ equals = "unknown", hide = true }] }],
+  [{ token = "$hub1", rules = [{ contains = "stale", dim = true }, { contains = "gh not", dim = true }] }],
+  [{ token = "$hub2", rules = [{ contains = "stale", dim = true }, { contains = "gh not", dim = true }] }],
+  [{ token = "$hub3", rules = [{ contains = "stale", dim = true }, { contains = "gh not", dim = true }] }],
+  [{ token = "$hub4", rules = [{ contains = "stale", dim = true }, { contains = "gh not", dim = true }] }],
+]
+```
+
+Then bind the two hotkeys:
+
+```toml
+[[keys.command]]
+key = "ctrl+shift+m"
+type = "plugin_action"
+command = "herdr-hub.menu"
+
+[[keys.command]]
+key = "ctrl+shift+n"
+type = "plugin_action"
+command = "herdr-hub.new-worktree"
+```
+
+Apply the changes with `herdr server reload-config`.
+
+### Terminal notes
+
+- **Windows Terminal** uses ctrl+shift+m (mark mode) and ctrl+shift+n (new window) itself. Unbind them in its `settings.json`, under `keybindings`:
+
+  ```json
+  { "id": null, "keys": "ctrl+shift+m" },
+  { "id": null, "keys": "ctrl+shift+n" }
+  ```
+
+- **On Windows, don't use ctrl+alt+letter.** Many keyboard layouts treat ctrl+alt as AltGr, so the key never reaches herdr.
+- **Ghostty and other terminals:** if a key clashes with one of your terminal's shortcuts, pick a different key in the `[[keys.command]]` blocks.
+
+## Configure it
+
+The plugin's settings live in `config.json` in the folder printed by `herdr plugin config-dir herdr-hub`. Every key is optional. These are the defaults:
+
+```json
+{
+  "pinned": [],
+  "refresh": { "localSeconds": 15, "githubSeconds": 180 },
+  "cleanup": { "staleDays": 30 },
+  "releaseWorkflowPattern": "release|deploy|publish",
+  "newWorktree": { "branchPrefix": "feature/" },
+  "indent": "blank"
+}
+```
+
+- **pinned:** the spaces to keep open, each as `{ "label": "my site", "path": "C:/dev/my-site" }`. You can also use "Pin this space" in the menu. Spaces are matched by label, so if you rename a pinned space a fresh one appears with the old name.
+- **refresh:** how often the sidebar reads local state (branch, agents) and GitHub.
+- **cleanup.staleDays:** how many days without a commit before a worktree with no open PR counts as stale.
+- **releaseWorkflowPattern:** which GitHub Actions workflows count as releases, matched against the workflow name and file name.
+- **newWorktree.branchPrefix:** put in front of the name you type. "stairs fix" becomes `feature/stairs-fix`. Type `fix/stairs` to choose the whole branch name yourself.
+- **indent:** `"blank"` indents the sidebar lines with an invisible character. If your font shows it as dots or boxes, use `"bar"` instead.
+
+## What the sidebar shows
+
+A project space (the repo's main folder):
+
+```
+    main ✓ ⇡2
+    ⇡ Release · ✓ · 2d ago
+```
+
+A worktree space:
+
+```
+      claude · stairs fix · working
+      feature/stairs-fix ●
+      PR #7 · draft · checks ✓
+```
+
+| Mark | Meaning |
+| --- | --- |
+| ✓ | clean folder, or passing checks / release |
+| ● | uncommitted changes |
+| ⇡2 ⇣1 | commits ahead of / behind the upstream branch |
+| ✗ | failing checks or release |
+| ⋯ | still running |
+| stale | GitHub couldn't be reached; these are the last known values |
+| gh not signed in | run `gh auth login` |
+
+The release line is the newest of three things GitHub knows about:
+
+1. **Deployments.** Production is preferred. Vercel and most hosts that are connected to GitHub report these.
+2. **Published GitHub releases.**
+3. **Workflow runs** whose name or file matches `releaseWorkflowPattern`. This includes self-hosted runners.
+
+Pull requests only show on the worktree space for their branch. PRs with no open space aren't shown.
+
+## Cleaning up workstreams
+
+"Clean up workstreams…" in the menu lists worktrees that look finished:
+
+- **merged:** the branch has no commits that aren't already on the default branch
+- **PR merged:** its pull request was merged
+- **stale:** no commits for `staleDays` and no open PR
+- **folder missing:** git still lists it but the folder is gone
+
+Press space to tick a worktree, and `b` to also delete its branch. Nothing happens until you confirm.
+
+It is careful by design:
+
+- It never forces anything. A worktree with uncommitted changes can't be ticked, and git refuses to remove one that has any.
+- It deletes branches with `git branch -d`, so a branch with unmerged work is kept and reported.
+- It never touches the repo's main folder.
+- If the worktree has a space open, the space closes first, along with any agent in it.
+
+## Troubleshooting
+
+- Open the menu and choose **Check setup**. It checks Node, git, the GitHub CLI, herdr, the config.toml snippet, config.json and the sidebar updater.
+- The plugin logs to `herdr-hub.log` in its state folder. "Refresh now" in the menu shows the latest problems.
+
+## Licence
+
+MIT
