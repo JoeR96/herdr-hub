@@ -1,6 +1,6 @@
 import { existsSync, rmSync } from "node:fs";
 import { basename } from "node:path";
-import { deleteBranch, pruneWorktrees, removeWorktree } from "./io/git.ts";
+import { deleteBranch, forgetMissingWorktree, removeWorktree } from "./io/git.ts";
 import type { Row } from "./cleanup-gather.ts";
 
 // On Windows a shell or agent that is still exiting keeps the folder locked for a moment. git has already
@@ -27,17 +27,17 @@ export async function runCleanupActions(herdr: { closeWorkspace(id: string): Pro
         await new Promise((res) => setTimeout(res, settleMs));
       }
       if (r.reason === "missing") {
-        const p = await pruneWorktrees(r.repoRoot);
-        out.push(p.code === 0 ? `✓ ${name}: pruned` : `✗ ${name}: ${p.stderr.trim()}`);
-        continue;
+        if (!forgetMissingWorktree(r.repoRoot, r.path)) { out.push(`✗ ${name}: couldn't find git's record of this worktree`); continue; }
+        out.push(`✓ ${name}: forgotten (folder was already gone)`);
+      } else {
+        const rm = await removeWorktree(r.repoRoot, r.path);
+        const message = (rm.stderr || rm.stdout).trim();
+        if (rm.code !== 0 && !(/failed to delete/i.test(message) && await finishDelete(r.path))) {
+          out.push(`✗ ${name}: ${message}`);
+          continue;
+        }
+        out.push(`✓ ${name}: worktree removed`);
       }
-      const rm = await removeWorktree(r.repoRoot, r.path);
-      const message = (rm.stderr || rm.stdout).trim();
-      if (rm.code !== 0 && !(/failed to delete/i.test(message) && await finishDelete(r.path))) {
-        out.push(`✗ ${name}: ${message}`);
-        continue;
-      }
-      out.push(`✓ ${name}: worktree removed`);
       if (r.branch && deleteBranches.has(r.path)) {
         const b = await deleteBranch(r.repoRoot, r.branch);
         out.push(b.code === 0 ? `✓ ${name}: branch ${r.branch} deleted` : `✗ ${name}: kept branch ${r.branch} (${b.stderr.trim()})`);

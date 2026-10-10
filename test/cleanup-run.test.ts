@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "../src/io/exec.ts";
@@ -25,7 +25,7 @@ async function repoWithCommit(prefix: string): Promise<{ root: string; repo: str
 }
 
 const row = (repoRoot: string, path: string, branch: string, over: Partial<Row> = {}): Row => ({
-  path, branch, reason: "merged", detail: "merged", dirty: false, workspaceId: null, agentCount: 0, selectable: true,
+  path, branch, reason: "merged", detail: "merged", dirty: false, orphanCommits: false, otherSpaces: [], workspaceId: null, agentCount: 0, selectable: true,
   repoRoot, repoName: "repo", ...over,
 });
 const noHerdr = { closeWorkspace: async () => {} };
@@ -70,6 +70,23 @@ test("a dirty worktree is refused by git and reported, not forced", async () => 
   const out = await runCleanupActions(noHerdr, [row(repo, wt, "feature/x")], new Set(), 0);
   assert.equal(existsSync(wt), true);
   assert.ok(out[0].startsWith("✗"), out[0]);
+});
+
+test("a missing worktree is pruned on its own, leaving other missing ones alone", async () => {
+  const { root, repo } = await repoWithCommit("hub-missing-");
+  const gone1 = join(root, "gone1"), gone2 = join(root, "gone2");
+  await git(repo, "worktree", "add", "-b", "feature/gone1", gone1);
+  await git(repo, "worktree", "add", "-b", "feature/gone2", gone2);
+  rmSync(gone1, { recursive: true, force: true });
+  rmSync(gone2, { recursive: true, force: true });
+
+  const out = await runCleanupActions(noHerdr, [row(repo, gone1, "feature/gone1", { reason: "missing", detail: "folder missing" })], new Set([gone1]), 0);
+  const list = await git(repo, "worktree", "list", "--porcelain");
+  assert.ok(!list.includes("gone1"), out.join("\n"));
+  assert.ok(list.includes("gone2"), "an unticked missing worktree must not be pruned");
+  const branches = await git(repo, "branch", "--format=%(refname:short)");
+  assert.ok(!branches.includes("feature/gone1"), "b on a missing row deletes its branch too");
+  assert.ok(branches.includes("feature/gone2"));
 });
 
 test("a folder that is briefly locked after git unregisters it is still removed", async () => {

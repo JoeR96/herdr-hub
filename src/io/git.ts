@@ -1,5 +1,6 @@
-import { statSync } from "node:fs";
-import { join } from "node:path";
+import { readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { normPath } from "../model/paths.ts";
 import { run } from "./exec.ts";
 import type { RunResult } from "./exec.ts";
 import { parseStatusV2, parseWorktreeList, parseRevParse, parseGitHubRemote, repoRootFromCommonDir } from "../model/git-parse.ts";
@@ -75,8 +76,27 @@ export function removeWorktree(repo: string, path: string): Promise<RunResult> {
   return git(repo, ["worktree", "remove", path]);
 }
 
-export function pruneWorktrees(repo: string): Promise<RunResult> {
-  return git(repo, ["worktree", "prune"]);
+// True when some branch, tag or remote ref contains the commit, so removing a detached worktree loses nothing.
+export async function onAnyRef(repo: string, sha: string): Promise<boolean> {
+  const r = await git(repo, ["for-each-ref", "--count=1", "--contains", sha, "--format=%(refname)", "refs/heads", "refs/tags", "refs/remotes"]);
+  return r.code === 0 && r.stdout.trim().length > 0;
+}
+
+// Drops git's record of one worktree whose folder is gone. Unlike `git worktree prune`, it leaves every
+// other missing worktree alone (their folders may just be on a drive that isn't mounted right now).
+export function forgetMissingWorktree(repo: string, path: string): boolean {
+  const admin = join(repo, ".git", "worktrees");
+  let entries: string[];
+  try { entries = readdirSync(admin); } catch { return false; }
+  for (const id of entries) {
+    try {
+      const gitdir = readFileSync(join(admin, id, "gitdir"), "utf8").trim();
+      if (normPath(dirname(gitdir)) !== normPath(path)) continue;
+      rmSync(join(admin, id), { recursive: true, force: true });
+      return true;
+    } catch { /* not a worktree entry */ }
+  }
+  return false;
 }
 
 export function deleteBranch(repo: string, branch: string): Promise<RunResult> {

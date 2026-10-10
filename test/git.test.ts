@@ -4,7 +4,7 @@ import { mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "../src/io/exec.ts";
-import { locate, status, worktrees, mergedBranches, headTime } from "../src/io/git.ts";
+import { locate, status, worktrees, mergedBranches, headTime, onAnyRef } from "../src/io/git.ts";
 import { samePath } from "../src/model/paths.ts";
 
 async function git(cwd: string, ...args: string[]) {
@@ -40,4 +40,22 @@ test("git helpers read a real repo with a linked worktree", async () => {
 
   assert.ok((await mergedBranches(repo, "main")).has("feature/x"));
   assert.ok(((await headTime(wt)) ?? 0) > 0);
+});
+
+test("onAnyRef tells whether a detached HEAD's commits would survive removing the worktree", async () => {
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), "hub-detached-")));
+  const repo = join(root, "repo");
+  await run("git", ["init", "-b", "main", repo]);
+  writeFileSync(join(repo, "a.txt"), "a");
+  await git(repo, "add", ".");
+  await git(repo, "commit", "-m", "init");
+  const wt = join(root, "wt");
+  await git(repo, "worktree", "add", "--detach", wt);
+  const atMain = (await git(wt, "rev-parse", "HEAD")).trim();
+  assert.equal(await onAnyRef(repo, atMain), true);
+  writeFileSync(join(wt, "b.txt"), "b");
+  await git(wt, "add", ".");
+  await git(wt, "commit", "-m", "experiment");
+  const experiment = (await git(wt, "rev-parse", "HEAD")).trim();
+  assert.equal(await onAnyRef(repo, experiment), false);
 });
