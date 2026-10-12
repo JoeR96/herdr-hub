@@ -1,6 +1,5 @@
 import { readPublished, readStore, unpublishedCount } from "../../claude-evidence/lib/store.ts";
-
-export interface EvidenceInfo { url: string | null; unpublished: number }
+import type { EvidenceInfo } from "../model/lines.ts";
 
 /** Evidence page state for a worktree folder; null when it has none or its files can't be read. */
 export function readEvidence(folder: string): EvidenceInfo | null {

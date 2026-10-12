@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildLines, toTokens, BLANK } from "../src/model/lines.ts";
+import { buildLines, toTokens, BLANK, sidebarWidth, DEFAULT_WIDTH } from "../src/model/lines.ts";
 import type { SpaceView } from "../src/model/lines.ts";
 
 const now = Date.parse("2026-10-10T12:00:00Z");
 const clean = { branch: "main", upstream: "origin/main", ahead: 2, behind: 0, dirty: false };
-const base: SpaceView = { kind: "main", git: clean, agents: [], pr: null, release: null, ghProblem: null, stale: false, now, indent: "blank", evidence: null };
+const base: SpaceView = { kind: "main", git: clean, agents: [], pr: null, release: null, ghProblem: null, stale: false, now, indent: "blank", evidence: null, width: 200 };
 
 test("main space: indented branch line and release line", () => {
   const lines = buildLines({ ...base, release: { source: "workflow", name: "Release Widgets", state: "success", atMs: now - 2 * 86_400_000, url: null } });
@@ -47,12 +47,38 @@ test("toTokens fills hub1..hub4 and clears the rest", () => {
   assert.deepEqual(toTokens(["a", "b"]), { hub1: "a", hub2: "b", hub3: null, hub4: null });
 });
 
-test("worktree branch line shows evidence state", () => {
-  const wt = { ...base, kind: "worktree" as const, git: { ...clean, branch: "feature/x", ahead: 0 } };
-  const branch = (evidence: SpaceView["evidence"]) => buildLines({ ...wt, evidence })[0].replaceAll(BLANK, "");
-  assert.equal(branch(null), "feature/x ✓");
-  assert.equal(branch({ url: "https://claude.ai/artifact/a", unpublished: 0 }), "feature/x ✓ · evidence");
-  assert.equal(branch({ url: "https://claude.ai/artifact/a", unpublished: 3 }), "feature/x ✓ · evidence +3");
-  assert.equal(branch({ url: null, unpublished: 2 }), "feature/x ✓ · evidence +2");
-  assert.equal(buildLines({ ...base, evidence: { url: "u", unpublished: 1 } })[0].replaceAll(BLANK, ""), "main ✓ ⇡2");
+test("evidence gets its own line after the PR", () => {
+  const wt = { ...base, kind: "worktree" as const, git: { ...clean, branch: "feature/x", ahead: 0 },
+    pr: { number: 7, title: "t", url: "u", isDraft: false, headRefName: "feature/x", checks: "success" as const } };
+  const text = (evidence: SpaceView["evidence"]) => buildLines({ ...wt, evidence }).map((l) => l.replaceAll(BLANK, ""));
+  assert.deepEqual(text(null), ["feature/x ✓", "PR #7 · open · checks ✓"]);
+  assert.deepEqual(text({ url: "https://claude.ai/artifact/a", unpublished: 0 }), ["feature/x ✓", "PR #7 · open · checks ✓", "evidence ✓"]);
+  assert.deepEqual(text({ url: "https://claude.ai/artifact/a", unpublished: 3 }).at(-1), "evidence +3 to publish");
+  assert.deepEqual(text({ url: null, unpublished: 2 }).at(-1), "evidence +2 to publish");
+  assert.equal(buildLines({ ...base, evidence: { url: "u", unpublished: 1 } }).length, 1);
+});
+
+test("long names are shortened to fit the width and the status marks survive", () => {
+  const cells = (l: string) => [...l].length;
+  const lines = buildLines({ ...base, kind: "worktree", width: 30,
+    git: { ...clean, branch: "feature/arena-experience-overhaul", ahead: 37, dirty: true },
+    agents: [{ kind: "claude", title: "bdb-arena-experience-overhaul", state: "working" }],
+    evidence: { url: "u", unpublished: 12 } });
+  for (const l of lines) assert.ok(cells(l) <= 30, `${l} is ${cells(l)} wide`);
+  const text = lines.map((l) => l.replaceAll(BLANK, ""));
+  assert.match(text[0], /^claude · bdb.*… · working$/);
+  assert.match(text[1], /^feature\/arena.*… ● ⇡37$/);
+  assert.equal(text[2], "evidence +12 to publish");
+});
+
+test("lines with nothing to shorten are cut at the end with an ellipsis", () => {
+  const lines = buildLines({ ...base, width: 12, ghProblem: "gh not signed in", git: { ...clean, ahead: 0 } });
+  assert.deepEqual(lines.map((l) => [...l].length), [10, 12]);
+  assert.ok(lines[1].endsWith("…"));
+});
+
+test("sidebarWidth reads herdr's sidebar_width and leaves room for the border", () => {
+  assert.equal(sidebarWidth("[ui]\nsidebar_width = 52\nsidebar_max_width = 72\n"), 48);
+  assert.equal(sidebarWidth("[ui]\npane_gaps = true\n"), DEFAULT_WIDTH);
+  assert.equal(sidebarWidth(null), DEFAULT_WIDTH);
 });

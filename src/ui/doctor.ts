@@ -1,9 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { run } from "../io/exec.ts";
 import { Herdr } from "../io/herdr.ts";
 import { ghStatus } from "../io/github.ts";
-import { configDir, loadConfig } from "../config.ts";
+import { configDir, herdrConfigPath, loadConfig } from "../config.ts";
 import { lockHeld, readPidLock, statePaths } from "../state.ts";
 import { showMessage } from "./term.ts";
 
@@ -18,9 +17,7 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-export function herdrConfigPath(pluginConfigDir: string): string {
-  return join(pluginConfigDir, "..", "..", "..", "config.toml");
-}
+export { herdrConfigPath };
 
 export function snippetChecks(toml: string | null): Check[] {
   if (toml === null) return [{ name: "herdr config.toml", ok: false, detail: "not found" }];
