@@ -22,7 +22,7 @@ export { herdrConfigPath };
 export function snippetChecks(toml: string | null): Check[] {
   if (toml === null) return [{ name: "herdr config.toml", ok: false, detail: "not found" }];
   return [
-    { name: "sidebar rows", ok: toml.includes('"$hub1"'), detail: "add the [ui.sidebar.spaces] rows from the README" },
+    { name: "sidebar rows", ok: toml.includes('"$hub_branch"'), detail: "add the [ui.sidebar.spaces] rows from the README" },
     { name: "menu hotkey", ok: toml.includes("herdr-hub.menu"), detail: "bind herdr-hub.menu (README)" },
     { name: "new worktree hotkey", ok: toml.includes("herdr-hub.new-worktree"), detail: "bind herdr-hub.new-worktree (README)" },
   ];

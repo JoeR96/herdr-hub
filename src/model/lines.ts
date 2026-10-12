@@ -1,13 +1,24 @@
 import type { GitStatus } from "./git-parse.ts";
 import type { PullRequest } from "./github-map.ts";
 import type { Release } from "./release.ts";
-import { symbol } from "./checks.ts";
-import { age, cellWidth, cutCells } from "./format.ts";
+import type { CheckState } from "./checks.ts";
+import { age, cellWidth, cutCells, graphemes } from "./format.ts";
 
 // herdr trims ordinary leading whitespace from token values; U+2800 survives and renders blank.
 export const BLANK = "⠀";
-export const TOKEN_NAMES = ["hub1", "hub2", "hub3", "hub4"] as const;
-// herdr cuts token values at the sidebar edge without wrapping, so lines are fitted to the sidebar.
+// Nerd Font glyphs (the Font Awesome / Octicons / Devicons ranges; Material Design ones don't render).
+export const ICON = { agent: "", branch: "", pr: "", release: "", evidence: "", running: "" } as const;
+
+// Each part is its own token so herdr's config can colour it; rows with no value disappear.
+// The [ui.sidebar.spaces] rows in the README place and colour them.
+export const TOKEN_NAMES = [
+  "hub_agent", "hub_agent2", "hub_branch", "hub_branch2", "hub_git", "hub_ahead", "hub_behind",
+  "hub_pr", "hub_checks", "hub_release", "hub_release2", "hub_release_state", "hub_release_age",
+  "hub_evidence", "hub_evidence_state", "hub_problem",
+] as const;
+export type Tokens = Record<(typeof TOKEN_NAMES)[number], string | null>;
+
+// herdr cuts token values at the sidebar edge without wrapping, so long names are wrapped here.
 // Measured on herdr 0.9.1: a space row shows sidebar_width - 8 cells, a worktree row nested under its
 // repo 4 fewer. One more cell is kept spare.
 export const DEFAULT_WIDTH = 40;
@@ -31,9 +42,6 @@ export interface SpaceView {
   width: number;
 }
 
-/** A line whose `flex` part (a name) is shortened first, so the status marks in `head`/`tail` stay visible. */
-interface Line { head: string; flex: string; tail: string }
-
 /** herdr's sidebar width: a width dragged by hand (session.json) wins over [ui] sidebar_width in config.toml. */
 export function sidebarWidth(toml: string | null, session: string | null): number {
   try {
@@ -44,60 +52,71 @@ export function sidebarWidth(toml: string | null, session: string | null): numbe
   return m ? Number(m[1]) : DEFAULT_WIDTH;
 }
 
-
-function fit(l: Line, width: number): string {
-  const whole = l.head + l.flex + l.tail;
-  if (cellWidth(whole) <= width) return whole;
-  const room = width - cellWidth(l.head) - cellWidth(l.tail);
-  if (l.flex && room >= 2) return l.head + cutCells(l.flex, room) + l.tail;
-  return cutCells(whole, width);
-}
-
 function indentFor(kind: SpaceView["kind"], style: IndentStyle): string {
   return style === "bar" ? "│ " : BLANK.repeat(kind === "main" ? 4 : 6);
 }
 
-function branchLine(g: GitStatus | null): Line | null {
-  if (!g) return null;
-  let tail = ` ${g.dirty ? "●" : "✓"}`;
-  if (g.ahead) tail += ` ⇡${g.ahead}`;
-  if (g.behind) tail += ` ⇣${g.behind}`;
-  return { head: "", flex: g.branch ?? "detached", tail };
+/**
+ * `lead + name` in at most `room` cells, wrapping once onto a second line indented by `cont`.
+ * Breaks after a / - _ or space when one fits; only a name too long for two lines is cut.
+ */
+function wrap(lead: string, name: string, room: number, cont: string): [string, string | null] {
+  if (cellWidth(lead + name) <= room) return [lead + name, null];
+  const parts = graphemes(name);
+  const avail = room - cellWidth(lead);
+  let used = 0, fits = 0, lastBreak = 0;
+  for (const p of parts) {
+    if (used + p.cells > avail) break;
+    used += p.cells;
+    fits++;
+    if ("/-_ ".includes(p.text)) lastBreak = fits;
+  }
+  const at = lastBreak || Math.max(fits, 1);
+  const first = parts.slice(0, at).map((p) => p.text).join("").trimEnd();
+  const rest = parts.slice(at).map((p) => p.text).join("").trimStart();
+  return [lead + first, cutCells(cont + rest, room)];
 }
 
-function evidenceLine(e: EvidenceInfo | null): Line | null {
-  if (!e || (!e.url && !e.unpublished)) return null;
-  return { head: e.unpublished ? `evidence +${e.unpublished} to publish` : "evidence ✓", flex: "", tail: "" };
-}
+const CHECKS: Record<CheckState, string> = {
+  success: "✔ checks passed", failure: "✘ checks failed", pending: `${ICON.running} checks running`, none: "no checks",
+};
+const STATE: Record<CheckState, string | null> = { success: "✔", failure: "✘", pending: ICON.running, none: null };
 
-function releaseLine(r: Release, now: number, stale: boolean): Line {
-  const sym = symbol(r.state);
-  return { head: "⇡ ", flex: r.name, tail: ["", ...(sym ? [sym] : []), age(r.atMs, now), ...(stale ? ["stale"] : [])].join(" · ") };
-}
-
-function prLine(p: PullRequest, stale: boolean): Line {
-  return { head: [`PR #${p.number}`, p.isDraft ? "draft" : "open", `checks ${symbol(p.checks) || "none"}`, ...(stale ? ["stale"] : [])].join(" · "), flex: "", tail: "" };
-}
-
-function agentLine(agents: AgentInfo[]): Line | null {
-  if (!agents.length) return null;
-  const a = agents[0];
-  return { head: `${a.kind} · `, flex: a.title, tail: ` · ${a.state}${agents.length > 1 ? ` +${agents.length - 1}` : ""}` };
-}
-
-const plain = (s: string | null): Line | null => (s ? { head: s, flex: "", tail: "" } : null);
-
-export function buildLines(v: SpaceView): string[] {
-  const raw = v.kind === "main"
-    ? [branchLine(v.git), v.release ? releaseLine(v.release, v.now, v.stale) : null, plain(v.ghProblem)]
-    : [agentLine(v.agents), branchLine(v.git), v.pr ? prLine(v.pr, v.stale) : null, evidenceLine(v.evidence)];
+export function buildTokens(v: SpaceView): Tokens {
+  const t = Object.fromEntries(TOKEN_NAMES.map((n) => [n, null])) as Tokens;
+  if (!v.git) return t;
   const pad = indentFor(v.kind, v.indent);
-  const room = v.width - INSET[v.kind] - cellWidth(pad);
-  return raw.filter((l): l is Line => !!l).slice(0, TOKEN_NAMES.length).map((l) => pad + fit(l, room));
-}
+  const cont = pad + BLANK.repeat(2);
+  const room = v.width - INSET[v.kind];
+  const stale = v.stale ? " · stale" : "";
 
-export function toTokens(lines: string[]): Record<string, string | null> {
-  const tokens: Record<string, string | null> = {};
-  TOKEN_NAMES.forEach((name, i) => { tokens[name] = lines[i] ?? null; });
-  return tokens;
+  if (v.kind === "worktree" && v.agents.length) {
+    const more = v.agents.length > 1 ? ` +${v.agents.length - 1}` : "";
+    [t.hub_agent, t.hub_agent2] = wrap(`${pad}${ICON.agent} `, v.agents[0].title + more, room, cont);
+  }
+  [t.hub_branch, t.hub_branch2] = wrap(`${pad}${ICON.branch} `, v.git.branch ?? "detached", room, cont);
+  t.hub_git = `${pad}${v.git.dirty ? "● changes" : "✔ clean"}`;
+  t.hub_ahead = v.git.ahead ? `↑${v.git.ahead}` : null;
+  t.hub_behind = v.git.behind ? `↓${v.git.behind}` : null;
+
+  if (v.kind === "worktree") {
+    if (v.pr) {
+      t.hub_pr = `${pad}${ICON.pr} #${v.pr.number} ${v.pr.isDraft ? "draft" : "open"}`;
+      t.hub_checks = CHECKS[v.pr.checks] + stale;
+    }
+    if (v.evidence && (v.evidence.url || v.evidence.unpublished)) {
+      t.hub_evidence = `${pad}${ICON.evidence} evidence`;
+      t.hub_evidence_state = v.evidence.unpublished ? `${v.evidence.unpublished} to publish` : "✔ up to date";
+    }
+  } else {
+    if (v.release) {
+      t.hub_release_state = STATE[v.release.state];
+      t.hub_release_age = age(v.release.atMs, v.now) + stale;
+      // state and age share the row (herdr joins tokens with " · "), so the name wraps before them
+      const after = [t.hub_release_state, t.hub_release_age].filter(Boolean).map((s) => cellWidth(` · ${s}`)).reduce((a, b) => a + b, 0);
+      [t.hub_release, t.hub_release2] = wrap(`${pad}${ICON.release} `, v.release.name, room - after, cont);
+    }
+    if (v.ghProblem) t.hub_problem = `${pad}${v.ghProblem}`;
+  }
+  return t;
 }

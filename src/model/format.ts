@@ -43,3 +43,8 @@ export function cutCells(s: string, n: number): string {
   }
   return out + "…";
 }
+
+/** The graphemes of s with the cells each takes, for wrapping by width. */
+export function graphemes(s: string): { text: string; cells: number }[] {
+  return [...segmenter.segment(s)].map(({ segment }) => ({ text: segment, cells: graphemeCells(segment) }));
+}

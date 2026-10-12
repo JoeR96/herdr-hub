@@ -1,6 +1,6 @@
 # claude-evidence
 
-Gives each git worktree one evidence page: a private Claude Artifact with the screenshots, recordings, test output and diffs Claude used to check its work. herdr hub shows `· evidence` on the worktree's sidebar row and adds "Open evidence page" to its menu.
+Gives each git worktree one evidence page: a private Claude Artifact with the screenshots, recordings, test output and diffs Claude used to check its work. herdr hub shows an evidence line under the worktree in its sidebar and adds "Open evidence page" to its menu.
 
 ## Install
 
