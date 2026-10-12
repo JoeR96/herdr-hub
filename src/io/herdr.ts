@@ -47,11 +47,15 @@ export class Herdr {
   }
 
   async reportTokens(workspaceId: string, tokens: Record<string, string | null>, ttlMs: number): Promise<void> {
-    const args = ["workspace", "report-metadata", workspaceId, "--source", "herdr-hub", "--ttl-ms", String(ttlMs)];
-    for (const [k, v] of Object.entries(tokens)) {
-      if (v === null) args.push("--clear-token", k); else args.push("--token", `${k}=${v}`);
+    // herdr accepts at most 16 tokens per report, so larger sets go in several calls
+    const entries = Object.entries(tokens);
+    for (let i = 0; i < entries.length; i += 16) {
+      const args = ["workspace", "report-metadata", workspaceId, "--source", "herdr-hub", "--ttl-ms", String(ttlMs)];
+      for (const [k, v] of entries.slice(i, i + 16)) {
+        if (v === null) args.push("--clear-token", k); else args.push("--token", `${k}=${v}`);
+      }
+      await this.call(args);
     }
-    await this.call(args);
   }
 
   async createWorktree(o: { repo: string; branch: string; base: string; label: string }): Promise<{ workspaceId: string; paneId: string }> {

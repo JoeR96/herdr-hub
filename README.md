@@ -28,18 +28,37 @@ herdr plugin install JoeR96/herdr-hub
 
 A plugin can't edit herdr's config, so add these yourself. Run `herdr config check` to find the file.
 
-The plugin writes up to four lines under each space. Show them by replacing your `[ui.sidebar.spaces]` rows:
+The plugin reports each part separately (agent, branch, git state, PR, checks, release, evidence), so your config decides where each one goes and what colour it is. Rows with nothing to show disappear, and long names wrap onto their `…2` row. The icons need a [Nerd Font](https://www.nerdfonts.com/) in your terminal. Replace your `[ui.sidebar.spaces]` rows with:
 
 ```toml
 [ui.sidebar.spaces]
 rows = [
   ["state_icon", "workspace", { token = "state_text", rules = [{ equals = "unknown", hide = true }] }],
-  [{ token = "$hub1", rules = [{ contains = "stale", dim = true }, { contains = "gh not", dim = true }] }],
-  [{ token = "$hub2", rules = [{ contains = "stale", dim = true }, { contains = "gh not", dim = true }] }],
-  [{ token = "$hub3", rules = [{ contains = "stale", dim = true }, { contains = "gh not", dim = true }] }],
-  [{ token = "$hub4", rules = [{ contains = "stale", dim = true }, { contains = "gh not", dim = true }] }],
+  [{ token = "$hub_agent", fg = "#a8a8a8" }],
+  [{ token = "$hub_agent2", fg = "#a8a8a8" }],
+  [{ token = "$hub_branch", fg = "#61d6d6" }],
+  [{ token = "$hub_branch2", fg = "#61d6d6" }],
+  [{ token = "$hub_git", fg = "#16c60c", rules = [{ contains = "changes", fg = "#f9f1a5" }] }, { token = "$hub_ahead", fg = "#5c9cff" }, { token = "$hub_behind", fg = "#fb7e14" }],
+  [{ token = "$hub_pr", fg = "#c586c0", rules = [{ contains = "draft", dim = true }] }, { token = "$hub_checks", fg = "#16c60c", rules = [{ contains = "failed", fg = "#e74856" }, { contains = "running", fg = "#f9f1a5" }, { contains = "no checks", fg = "#8a8a8a" }, { contains = "stale", dim = true }] }],
+  [{ token = "$hub_checks2", fg = "#16c60c", rules = [{ contains = "failed", fg = "#e74856" }, { contains = "running", fg = "#f9f1a5" }, { contains = "no checks", fg = "#8a8a8a" }, { contains = "stale", dim = true }] }],
+  [{ token = "$hub_release", fg = "#cccccc" }, { token = "$hub_release_state", fg = "#16c60c", rules = [{ equals = "\u2717", fg = "#e74856" }, { equals = "\uF017", fg = "#f9f1a5" }] }, { token = "$hub_release_age", dim = true }],
+  [{ token = "$hub_release2", fg = "#cccccc" }],
+  [{ token = "$hub_evidence", fg = "#cccccc" }, { token = "$hub_evidence_state", fg = "#16c60c", rules = [{ contains = "to publish", fg = "#fb7e14", bold = true }] }],
+  [{ token = "$hub_evidence_state2", fg = "#16c60c", rules = [{ contains = "to publish", fg = "#fb7e14", bold = true }] }],
+  [{ token = "$hub_problem", fg = "#e74856" }],
 ]
 ```
+
+| Colour | Means |
+| --- | --- |
+| cyan | branch |
+| green | clean, checks passed, release succeeded, evidence up to date |
+| yellow | uncommitted changes, checks or release still running |
+| red | checks or release failed, GitHub problem |
+| blue / orange | commits ahead / behind the upstream |
+| purple | pull request (dimmed while it's a draft) |
+| orange, bold | evidence waiting to be published |
+| grey / dim | agent title, ages, drafts and anything stale |
 
 Then bind the two hotkeys:
 
@@ -93,33 +112,33 @@ The plugin's settings live in `config.json` in the folder printed by `herdr plug
 
 ## What the sidebar shows
 
-A project space (the repo's main folder):
+A project space (the repo's main folder), each part in its own colour:
 
 ```
-    main ✓ ⇡2
-    ⇡ Release · ✓ · 2d ago
+     main
+    ✓ clean · ↑2
+     Release · ✓ · 2d ago
 ```
 
 A worktree space:
 
 ```
-      claude · stairs fix · working
-      feature/stairs-fix ●
-      PR #7 · draft · checks ✓
+       stairs fix
+       feature/stairs-fix
+      ● changes · ↑3
+       #7 draft · ✓ checks passed
+       evidence · 3 to publish
 ```
 
 | Mark | Meaning |
 | --- | --- |
-| ✓ | clean folder, or passing checks / release |
-| ● | uncommitted changes |
-| ⇡2 ⇣1 | commits ahead of / behind the upstream branch |
-| ✗ | failing checks or release |
-| ⋯ | still running |
+| ✓ clean / ● changes | no uncommitted changes / some |
+| ↑2 ↓1 | commits ahead of / behind the upstream branch |
+| ✓ ✗  | passed, failed, still running (checks and releases) |
 | stale | GitHub couldn't be reached; these are the last known values |
 | gh not signed in | run `gh auth login` |
-| evidence ✓ | this worktree's evidence page is up to date (see below) |
-| evidence +3 to publish | 3 evidence items are waiting to be published |
-| … | a long branch, agent or release name was shortened to fit the sidebar |
+| evidence · ✓ up to date | this worktree's evidence page is current (see below) |
+| evidence · 3 to publish | 3 evidence items are waiting to be published |
 
 The release line is the newest of three things GitHub knows about:
 
@@ -129,11 +148,11 @@ The release line is the newest of three things GitHub knows about:
 
 Pull requests only show on the worktree space for their branch. PRs with no open space aren't shown.
 
-herdr cuts sidebar lines at its edge rather than wrapping them, so the hub fits each line to the sidebar width (a width you dragged, otherwise `sidebar_width` from config.toml). Names are shortened with `…` and the status marks at the end are kept. After changing `sidebar_width`, the next refresh picks it up.
+herdr cuts sidebar lines at its edge rather than wrapping them, so the hub wraps long branch, agent and release names onto a second line. It measures against the sidebar width (a width you dragged, otherwise `sidebar_width` from config.toml), and the next refresh picks up any change.
 
 ## Evidence pages
 
-When Claude works in a worktree, it can save proof as it goes: screenshots, recordings, test output, diffs. It then publishes them as one private Claude Artifact page for that worktree. The worktree gets its own `evidence ✓` line, and the hub menu gets **Open evidence page**.
+When Claude works in a worktree, it can save proof as it goes: screenshots, recordings, test output, diffs. It then publishes them as one private Claude Artifact page for that worktree. The worktree gets an evidence line (`evidence · ✓ up to date`), and the hub menu gets **Open evidence page**.
 
 The tool, skill and Claude hooks live in [`claude-evidence/`](claude-evidence/README.md). Install them with `node claude-evidence/install.ts`. Without them, the hub never shows any evidence.
 

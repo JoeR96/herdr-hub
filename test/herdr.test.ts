@@ -45,3 +45,16 @@ test("startAgent treats agent_not_ready as started", async () => {
   assert.equal((await herdr().startAgent("a", "w1:p1", [])).ok, true);
   delete process.env.FAKE_CODE; delete process.env.FAKE_REPLY;
 });
+
+test("reportTokens splits a report into calls of at most 16 tokens (herdr's limit)", async () => {
+  const out = join(mkdtempSync(join(tmpdir(), "hub-herdr-")), "args");
+  process.env.FAKE_OUT = out;
+  process.env.FAKE_REPLY = '{"id":"x","result":{}}';
+  const tokens = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`t${i}`, i % 2 ? `v${i}` : null]));
+  await herdr().reportTokens("w7", tokens, 30000);
+  const calls = readFileSync(out, "utf8").trim().split("\n").map((l) => JSON.parse(l) as string[]);
+  assert.equal(calls.length, 2);
+  const counts = calls.map((c) => c.filter((a) => a === "--token" || a === "--clear-token").length);
+  assert.deepEqual(counts, [16, 4]);
+  delete process.env.FAKE_OUT; delete process.env.FAKE_REPLY;
+});

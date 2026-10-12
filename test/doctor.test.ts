@@ -15,7 +15,7 @@ test("herdr's config.toml sits three levels above the plugin config folder", () 
 });
 
 test("snippetChecks spots the sidebar rows and both hotkeys", () => {
-  const ok = snippetChecks('rows = [["$hub1"]]\ncommand = "herdr-hub.menu"\ncommand = "herdr-hub.new-worktree"');
+  const ok = snippetChecks('rows = [["$hub_branch"]]\ncommand = "herdr-hub.menu"\ncommand = "herdr-hub.new-worktree"');
   assert.ok(ok.every((c) => c.ok));
   const missing = snippetChecks("");
   assert.equal(missing.filter((c) => !c.ok).length, 3);

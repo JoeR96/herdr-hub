@@ -5,7 +5,7 @@ import { status, githubRepo } from "./io/git.ts";
 import { ghStatus, fetchRepoData } from "./io/github.ts";
 import type { GitHubRepo } from "./model/git-parse.ts";
 import type { SpaceKind } from "./model/classify.ts";
-import { buildLines, sidebarWidth, toTokens } from "./model/lines.ts";
+import { buildTokens, sidebarWidth, TOKEN_NAMES } from "./model/lines.ts";
 import { readEvidence } from "./io/evidence.ts";
 import { configDir, loadConfig, readHerdrConfig, readHerdrSession } from "./config.ts";
 import { acquirePidLock, heartbeat, log, readCache, readPidLock, releasePidLock, statePaths, writeCache } from "./state.ts";
@@ -68,7 +68,7 @@ async function tick(): Promise<void> {
   for (const ws of snap.workspaces) {
     const k = kinds.get(ws.workspace_id)!;
     if (k.kind === "other") {
-      if (Object.keys(ws.tokens ?? {}).some((t) => t.startsWith("hub"))) await herdr.reportTokens(ws.workspace_id, toTokens([]), ttl);
+      if (Object.keys(ws.tokens ?? {}).some((t) => t.startsWith("hub"))) await herdr.reportTokens(ws.workspace_id, Object.fromEntries(TOKEN_NAMES.map((n) => [n, null])), ttl);
       continue;
     }
     const r = await repoFor(k.repoRoot);
@@ -78,7 +78,7 @@ async function tick(): Promise<void> {
       .filter((a) => a.workspace_id === ws.workspace_id)
       .map((a) => ({ kind: a.agent, title: a.terminal_title_stripped || a.name || a.agent, state: a.agent_status }));
     const pr = k.kind === "worktree" && git?.branch ? entry?.data?.prs.find((p) => p.headRefName === git.branch) ?? null : null;
-    const lines = buildLines({
+    const tokens = buildTokens({
       kind: k.kind, git, agents, pr,
       release: k.kind === "main" ? entry?.data?.release ?? null : null,
       ghProblem: r ? ghProblem : null,
@@ -86,7 +86,7 @@ async function tick(): Promise<void> {
       evidence: k.kind === "worktree" ? readEvidence(k.folder) : null,
       width,
     });
-    await herdr.reportTokens(ws.workspace_id, toTokens(lines), ttl);
+    await herdr.reportTokens(ws.workspace_id, tokens, ttl);
   }
 }
 
