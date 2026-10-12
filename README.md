@@ -117,6 +117,8 @@ A worktree space:
 | ⋯ | still running |
 | stale | GitHub couldn't be reached; these are the last known values |
 | gh not signed in | run `gh auth login` |
+| · evidence | this worktree has an evidence page (see below) |
+| · evidence +3 | 3 evidence items are waiting to be published |
 
 The release line is the newest of three things GitHub knows about:
 
@@ -125,6 +127,12 @@ The release line is the newest of three things GitHub knows about:
 3. **Workflow runs** whose name or file matches `releaseWorkflowPattern`. This includes self-hosted runners.
 
 Pull requests only show on the worktree space for their branch. PRs with no open space aren't shown.
+
+## Evidence pages
+
+When Claude works in a worktree, it can save proof as it goes: screenshots, recordings, test output, diffs. It then publishes them as one private Claude Artifact page for that worktree. The worktree's branch line shows `· evidence`, and the hub menu gets **Open evidence page**.
+
+The tool, skill and Claude hooks live in [`claude-evidence/`](claude-evidence/README.md). Install them with `node claude-evidence/install.ts`. Without them, the hub never shows any evidence.
 
 ## Cleaning up workstreams
 
