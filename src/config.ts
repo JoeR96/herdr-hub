@@ -102,3 +102,17 @@ export function togglePin(cfg: Config, label: string, path: string): { config: C
   const pinned = has ? cfg.pinned.filter((p) => p.label !== label) : [...cfg.pinned, { label, path }];
   return { config: { ...cfg, pinned }, pinned: !has };
 }
+
+/** herdr's own config.toml, three levels above the plugin config dir. */
+export function herdrConfigPath(pluginConfigDir: string): string {
+  return join(pluginConfigDir, "..", "..", "..", "config.toml");
+}
+
+export function readHerdrConfig(pluginConfigDir: string): string | null {
+  try { return readFileSync(herdrConfigPath(pluginConfigDir), "utf8"); } catch { return null; }
+}
+
+/** herdr's session.json (next to config.toml), which holds a sidebar width dragged by hand. */
+export function readHerdrSession(pluginConfigDir: string): string | null {
+  try { return readFileSync(join(pluginConfigDir, "..", "..", "..", "session.json"), "utf8"); } catch { return null; }
+}

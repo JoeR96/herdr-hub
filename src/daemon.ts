@@ -5,9 +5,9 @@ import { status, githubRepo } from "./io/git.ts";
 import { ghStatus, fetchRepoData } from "./io/github.ts";
 import type { GitHubRepo } from "./model/git-parse.ts";
 import type { SpaceKind } from "./model/classify.ts";
-import { buildLines, toTokens } from "./model/lines.ts";
+import { buildLines, sidebarWidth, toTokens } from "./model/lines.ts";
 import { readEvidence } from "./io/evidence.ts";
-import { configDir, loadConfig } from "./config.ts";
+import { configDir, loadConfig, readHerdrConfig, readHerdrSession } from "./config.ts";
 import { acquirePidLock, heartbeat, log, readCache, readPidLock, releasePidLock, statePaths, writeCache } from "./state.ts";
 import { spaceKind } from "./locate.ts";
 
@@ -29,6 +29,7 @@ async function repoFor(repoRoot: string): Promise<GitHubRepo | null> {
 
 async function tick(): Promise<void> {
   const { config } = loadConfig(configDir());
+  const width = sidebarWidth(readHerdrConfig(configDir()), readHerdrSession(configDir()));
   const pattern = new RegExp(config.releaseWorkflowPattern, "i");
   const snap = await herdr.snapshot();
   const now = Date.now();
@@ -83,6 +84,7 @@ async function tick(): Promise<void> {
       ghProblem: r ? ghProblem : null,
       stale: !!entry?.error, now, indent: config.indent,
       evidence: k.kind === "worktree" ? readEvidence(k.folder) : null,
+      width,
     });
     await herdr.reportTokens(ws.workspace_id, toTokens(lines), ttl);
   }

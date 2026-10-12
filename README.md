@@ -117,8 +117,9 @@ A worktree space:
 | ⋯ | still running |
 | stale | GitHub couldn't be reached; these are the last known values |
 | gh not signed in | run `gh auth login` |
-| · evidence | this worktree has an evidence page (see below) |
-| · evidence +3 | 3 evidence items are waiting to be published |
+| evidence ✓ | this worktree's evidence page is up to date (see below) |
+| evidence +3 to publish | 3 evidence items are waiting to be published |
+| … | a long branch, agent or release name was shortened to fit the sidebar |
 
 The release line is the newest of three things GitHub knows about:
 
@@ -128,9 +129,11 @@ The release line is the newest of three things GitHub knows about:
 
 Pull requests only show on the worktree space for their branch. PRs with no open space aren't shown.
 
+herdr cuts sidebar lines at its edge rather than wrapping them, so the hub fits each line to the sidebar width (a width you dragged, otherwise `sidebar_width` from config.toml). Names are shortened with `…` and the status marks at the end are kept. After changing `sidebar_width`, the next refresh picks it up.
+
 ## Evidence pages
 
-When Claude works in a worktree, it can save proof as it goes: screenshots, recordings, test output, diffs. It then publishes them as one private Claude Artifact page for that worktree. The worktree's branch line shows `· evidence`, and the hub menu gets **Open evidence page**.
+When Claude works in a worktree, it can save proof as it goes: screenshots, recordings, test output, diffs. It then publishes them as one private Claude Artifact page for that worktree. The worktree gets its own `evidence ✓` line, and the hub menu gets **Open evidence page**.
 
 The tool, skill and Claude hooks live in [`claude-evidence/`](claude-evidence/README.md). Install them with `node claude-evidence/install.ts`. Without them, the hub never shows any evidence.
 
