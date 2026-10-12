@@ -111,3 +111,8 @@ export function herdrConfigPath(pluginConfigDir: string): string {
 export function readHerdrConfig(pluginConfigDir: string): string | null {
   try { return readFileSync(herdrConfigPath(pluginConfigDir), "utf8"); } catch { return null; }
 }
+
+/** herdr's session.json (next to config.toml), which holds a sidebar width dragged by hand. */
+export function readHerdrSession(pluginConfigDir: string): string | null {
+  try { return readFileSync(join(pluginConfigDir, "..", "..", "..", "session.json"), "utf8"); } catch { return null; }
+}

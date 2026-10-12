@@ -2,14 +2,16 @@ import type { GitStatus } from "./git-parse.ts";
 import type { PullRequest } from "./github-map.ts";
 import type { Release } from "./release.ts";
 import { symbol } from "./checks.ts";
-import { age } from "./format.ts";
+import { age, cellWidth, cutCells } from "./format.ts";
 
 // herdr trims ordinary leading whitespace from token values; U+2800 survives and renders blank.
 export const BLANK = "⠀";
 export const TOKEN_NAMES = ["hub1", "hub2", "hub3", "hub4"] as const;
-// herdr cuts token values at the sidebar edge without wrapping, so lines are fitted to this many cells.
-export const DEFAULT_WIDTH = 36;
-const BORDER = 4;
+// herdr cuts token values at the sidebar edge without wrapping, so lines are fitted to the sidebar.
+// Measured on herdr 0.9.1: a space row shows sidebar_width - 8 cells, a worktree row nested under its
+// repo 4 fewer. One more cell is kept spare.
+export const DEFAULT_WIDTH = 40;
+const INSET = { main: 9, worktree: 13 } as const;
 
 export type IndentStyle = "blank" | "bar";
 export interface AgentInfo { kind: string; title: string; state: string }
@@ -25,28 +27,30 @@ export interface SpaceView {
   now: number;
   indent: IndentStyle;
   evidence: EvidenceInfo | null;
-  /** cells available for a whole line, indent included */
+  /** herdr's sidebar width in cells (see sidebarWidth) */
   width: number;
 }
 
 /** A line whose `flex` part (a name) is shortened first, so the status marks in `head`/`tail` stay visible. */
 interface Line { head: string; flex: string; tail: string }
 
-/** Text width of herdr's sidebar from its config.toml ([ui] sidebar_width), less the border and padding. */
-export function sidebarWidth(toml: string | null): number {
+/** herdr's sidebar width: a width dragged by hand (session.json) wins over [ui] sidebar_width in config.toml. */
+export function sidebarWidth(toml: string | null, session: string | null): number {
+  try {
+    const dragged = JSON.parse(session ?? "null")?.sidebar_width;
+    if (typeof dragged === "number" && dragged > 0) return dragged;
+  } catch { /* fall back to config.toml */ }
   const m = toml?.match(/^\s*sidebar_width\s*=\s*(\d+)/m);
-  return m ? Math.max(12, Number(m[1]) - BORDER) : DEFAULT_WIDTH;
+  return m ? Number(m[1]) : DEFAULT_WIDTH;
 }
 
-const cells = (s: string) => [...s].length;
-const cut = (s: string, n: number) => (n <= 0 ? "" : cells(s) <= n ? s : [...s].slice(0, Math.max(0, n - 1)).join("") + "…");
 
 function fit(l: Line, width: number): string {
   const whole = l.head + l.flex + l.tail;
-  if (cells(whole) <= width) return whole;
-  const room = width - cells(l.head) - cells(l.tail);
-  if (l.flex && room >= 2) return l.head + cut(l.flex, room) + l.tail;
-  return cut(whole, width);
+  if (cellWidth(whole) <= width) return whole;
+  const room = width - cellWidth(l.head) - cellWidth(l.tail);
+  if (l.flex && room >= 2) return l.head + cutCells(l.flex, room) + l.tail;
+  return cutCells(whole, width);
 }
 
 function indentFor(kind: SpaceView["kind"], style: IndentStyle): string {
@@ -88,7 +92,7 @@ export function buildLines(v: SpaceView): string[] {
     ? [branchLine(v.git), v.release ? releaseLine(v.release, v.now, v.stale) : null, plain(v.ghProblem)]
     : [agentLine(v.agents), branchLine(v.git), v.pr ? prLine(v.pr, v.stale) : null, evidenceLine(v.evidence)];
   const pad = indentFor(v.kind, v.indent);
-  const room = v.width - cells(pad);
+  const room = v.width - INSET[v.kind] - cellWidth(pad);
   return raw.filter((l): l is Line => !!l).slice(0, TOKEN_NAMES.length).map((l) => pad + fit(l, room));
 }
 

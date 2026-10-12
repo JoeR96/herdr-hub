@@ -129,7 +129,7 @@ The release line is the newest of three things GitHub knows about:
 
 Pull requests only show on the worktree space for their branch. PRs with no open space aren't shown.
 
-herdr cuts sidebar lines at its edge rather than wrapping them, so the hub fits each line to `sidebar_width` from herdr's config.toml. Names are shortened with `…` and the status marks at the end are kept. After changing `sidebar_width`, the next refresh picks it up.
+herdr cuts sidebar lines at its edge rather than wrapping them, so the hub fits each line to the sidebar width (a width you dragged, otherwise `sidebar_width` from config.toml). Names are shortened with `…` and the status marks at the end are kept. After changing `sidebar_width`, the next refresh picks it up.
 
 ## Evidence pages
 

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildLines, toTokens, BLANK, sidebarWidth, DEFAULT_WIDTH } from "../src/model/lines.ts";
+import { cellWidth } from "../src/model/format.ts";
 import type { SpaceView } from "../src/model/lines.ts";
 
 const now = Date.parse("2026-10-10T12:00:00Z");
@@ -58,9 +59,26 @@ test("evidence gets its own line after the PR", () => {
   assert.equal(buildLines({ ...base, evidence: { url: "u", unpublished: 1 } }).length, 1);
 });
 
+// Measured on herdr 0.9.1 with sidebar_width = 52: a top-level space row shows 44 cells and a
+// worktree row nested under its repo shows 40. Rows keep one more cell spare.
+test("rows fit herdr's measured room: sidebar width less 9 for spaces, 13 for nested worktrees", () => {
+  const long = "x".repeat(80);
+  assert.equal(cellWidth(buildLines({ ...base, width: 52, ghProblem: long })[1]), 43);
+  assert.equal(cellWidth(buildLines({ ...base, kind: "worktree", width: 52, pr: null, git: { ...clean, branch: long } })[0]), 39);
+});
+
+test("wide characters count as two cells and status marks still survive", () => {
+  const lines = buildLines({ ...base, kind: "worktree", width: 52,
+    git: { ...clean, branch: "feature/日本語のブランチ名前テスト機能追加", ahead: 3, behind: 1, dirty: true },
+    agents: [{ kind: "claude", title: "🚀 修复登录页面的错误并添加测试", state: "working" }] });
+  for (const l of lines) assert.ok(cellWidth(l) <= 39, `${l} is ${cellWidth(l)} cells`);
+  assert.ok(lines[0].endsWith("… · working"));
+  assert.ok(lines[1].endsWith("… ● ⇡3 ⇣1"));
+});
+
 test("long names are shortened to fit the width and the status marks survive", () => {
-  const cells = (l: string) => [...l].length;
-  const lines = buildLines({ ...base, kind: "worktree", width: 30,
+  const cells = cellWidth;
+  const lines = buildLines({ ...base, kind: "worktree", width: 43,
     git: { ...clean, branch: "feature/arena-experience-overhaul", ahead: 37, dirty: true },
     agents: [{ kind: "claude", title: "bdb-arena-experience-overhaul", state: "working" }],
     evidence: { url: "u", unpublished: 12 } });
@@ -72,13 +90,17 @@ test("long names are shortened to fit the width and the status marks survive", (
 });
 
 test("lines with nothing to shorten are cut at the end with an ellipsis", () => {
-  const lines = buildLines({ ...base, width: 12, ghProblem: "gh not signed in", git: { ...clean, ahead: 0 } });
-  assert.deepEqual(lines.map((l) => [...l].length), [10, 12]);
+  const lines = buildLines({ ...base, width: 21, ghProblem: "gh not signed in", git: { ...clean, ahead: 0 } });
+  assert.deepEqual(lines.map(cellWidth), [10, 12]);
   assert.ok(lines[1].endsWith("…"));
 });
 
-test("sidebarWidth reads herdr's sidebar_width and leaves room for the border", () => {
-  assert.equal(sidebarWidth("[ui]\nsidebar_width = 52\nsidebar_max_width = 72\n"), 48);
-  assert.equal(sidebarWidth("[ui]\npane_gaps = true\n"), DEFAULT_WIDTH);
-  assert.equal(sidebarWidth(null), DEFAULT_WIDTH);
+test("sidebarWidth prefers a dragged width from session.json, then config.toml", () => {
+  const toml = "[ui]\nsidebar_width = 52\nsidebar_max_width = 72\n";
+  assert.equal(sidebarWidth(toml, null), 52);
+  assert.equal(sidebarWidth(toml, '{"sidebar_width": null}'), 52);
+  assert.equal(sidebarWidth(toml, '{"sidebar_width": 64}'), 64);
+  assert.equal(sidebarWidth(toml, "not json"), 52);
+  assert.equal(sidebarWidth("[ui]\npane_gaps = true\n", null), DEFAULT_WIDTH);
+  assert.equal(sidebarWidth(null, null), DEFAULT_WIDTH);
 });
