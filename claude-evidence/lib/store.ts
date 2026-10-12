@@ -10,6 +10,7 @@ export type Source = { path: string } | { text: string } | null;
 
 export const MAX_TEXT = 200 * 1024;
 export const MAX_FILE = 15 * 1024 * 1024;
+const TEXT_KINDS: Kind[] = ["test-output", "log", "diff"];
 
 export const evidenceDir = (top: string) => join(top, ".evidence");
 const storeFile = (top: string) => join(evidenceDir(top), "evidence.json");
@@ -63,6 +64,14 @@ function excludeOnce(commonDir: string): void {
   appendFileSync(file, `${text && !text.endsWith("\n") ? "\n" : ""}.evidence/\n`);
 }
 
+function readText(path: string): string {
+  const buf = readFileSync(path);
+  if (buf.subarray(0, 8192).includes(0)) {
+    throw new Error(`${path} is not a text file - media must be .png, .jpg, .webp, .gif, .mp4 or .webm (or pass --kind)`);
+  }
+  return buf.toString("utf8");
+}
+
 function truncate(text: string): string {
   const buf = Buffer.from(text, "utf8");
   if (buf.length <= MAX_TEXT) return text;
@@ -83,8 +92,9 @@ export function addItem(top: string, commonDir: string, opts: { kind: Kind; capt
     const ext = "path" in opts.source ? extname(opts.source.path).toLowerCase() || ".txt" : ".txt";
     file = `files/${id}-${slug(opts.caption)}${ext}`;
     const dest = join(evidenceDir(top), file);
-    if ("path" in opts.source) copyFileSync(opts.source.path, dest);
-    else writeFileSync(dest, truncate(opts.source.text));
+    if ("text" in opts.source) writeFileSync(dest, truncate(opts.source.text));
+    else if (TEXT_KINDS.includes(opts.kind)) writeFileSync(dest, truncate(readText(opts.source.path)));
+    else copyFileSync(opts.source.path, dest);
   }
   const item: Item = { id, round: store.round, kind: opts.kind, file, caption: opts.caption, addedAt: opts.now.toISOString() };
   store.items.push(item);

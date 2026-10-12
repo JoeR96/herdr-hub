@@ -84,3 +84,16 @@ test("guessKind maps extensions", () => {
     ["screenshot", "screenshot", "screenshot", "gif", "video", "video", "diff", "diff", "log", "log"],
   );
 });
+
+test("text files added by path are truncated and binary files can't pose as text", () => {
+  const { wt } = repoWithWorktree();
+  const info = gitInfo(wt)!;
+  const log = join(wt, "big.log");
+  writeFileSync(log, "y".repeat(MAX_TEXT * 2) + "TAIL");
+  const item = addItem(info.top, info.commonDir, { kind: "log", caption: "big", source: { path: log }, now });
+  const saved = readFileSync(join(info.top, ".evidence", item.file!), "utf8");
+  assert.ok(saved.startsWith("[truncated") && saved.endsWith("TAIL"));
+  const bin = join(wt, "clip.mov");
+  writeFileSync(bin, Buffer.from([0, 1, 2, 0, 255]));
+  assert.throws(() => addItem(info.top, info.commonDir, { kind: guessKind(bin), caption: "mov", source: { path: bin }, now }), /not a text file/);
+});

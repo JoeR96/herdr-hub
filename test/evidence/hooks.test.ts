@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { homedir } from "node:os";
 import { repoWithWorktree } from "./helpers.ts";
 import { gitInfo } from "../../claude-evidence/lib/git.ts";
 import { addItem, markPublished } from "../../claude-evidence/lib/store.ts";
@@ -23,6 +24,8 @@ test("session start in a worktree adds a reminder naming the branch", () => {
   assert.equal(out.hookSpecificOutput.hookEventName, "SessionStart");
   assert.match(out.hookSpecificOutput.additionalContext, /feature\/x/);
   assert.match(out.hookSpecificOutput.additionalContext, /evidence/);
+  assert.ok(out.hookSpecificOutput.additionalContext.includes(`${homedir().replace(/\\/g, "/")}/.claude/evidence/evidence.ts`));
+  assert.equal(out.hookSpecificOutput.additionalContext.includes("~"), false);
 });
 
 test("stop blocks once per turn while evidence is unpublished, from any subfolder", () => {

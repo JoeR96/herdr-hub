@@ -10,7 +10,7 @@ const MARK = "/.claude/evidence/hooks/";
 
 interface HookGroup { matcher?: string; hooks: { type: string; command: string; timeout?: number }[] }
 
-export function install(opts: { home: string; source: string; node: string }): { settingsChanged: boolean; backup: string | null } {
+export function install(opts: { home: string; source: string }): { settingsChanged: boolean; backup: string | null } {
   const claude = join(opts.home, ".claude");
   const settingsPath = join(claude, "settings.json");
   let settings: { hooks?: Record<string, HookGroup[]> } = {};
@@ -36,7 +36,7 @@ export function install(opts: { home: string; source: string; node: string }): {
   for (const [event, script] of [["SessionStart", "session-start.ts"], ["Stop", "stop.ts"]] as const) {
     const groups = (hooks[event] ??= []);
     if (groups.some((g) => g.hooks?.some((h) => fwd(h.command ?? "").includes(MARK)))) continue;
-    groups.push({ hooks: [{ type: "command", command: `"${fwd(opts.node)}" "${fwd(tool)}/hooks/${script}"`, timeout: 10 }] });
+    groups.push({ hooks: [{ type: "command", command: `node "${fwd(tool)}/hooks/${script}"`, timeout: 10 }] });
     changed = true;
   }
   if (!changed) return { settingsChanged: false, backup: null };
@@ -52,7 +52,7 @@ export function install(opts: { home: string; source: string; node: string }): {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const r = install({ home: homedir(), source: fileURLToPath(new URL(".", import.meta.url)), node: process.execPath });
+    const r = install({ home: homedir(), source: fileURLToPath(new URL(".", import.meta.url)) });
     process.stdout.write(`evidence installed to ${fwd(join(homedir(), ".claude", "evidence"))}\n`);
     process.stdout.write(r.settingsChanged ? `hooks added to settings.json (backup: ${r.backup ?? "none, file was new"})\n` : "hooks already registered\n");
   } catch (e) {

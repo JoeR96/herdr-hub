@@ -46,3 +46,22 @@ test("bad input exits 1 with a message", () => {
   assert.equal(ev(wt, ["add", "--caption", "no source and not a note"]).status, 1);
   assert.equal(ev(wt, ["frobnicate"]).status, 1);
 });
+
+test("build --out copies the page and media under another folder", () => {
+  const { wt } = repoWithWorktree();
+  writeFileSync(join(wt, "shot.png"), "png");
+  ev(wt, ["add", "shot.png", "--caption", "Home"]);
+  const out = mkdtempSync(join(tmpdir(), "ev-out-"));
+  const built = JSON.parse(ev(wt, ["build", "--out", out]).stdout);
+  assert.equal(built.page, join(out, "index.html"));
+  assert.ok(existsSync(built.page));
+  assert.equal(built.files["files/1-home.png"], join(out, "files", "1-home.png"));
+  assert.ok(existsSync(built.files["files/1-home.png"]));
+});
+
+test("capture-screen saves a screenshot item", { skip: process.platform !== "win32" }, () => {
+  const { wt } = repoWithWorktree();
+  const r = ev(wt, ["capture-screen", "--caption", "Desktop after the fix"]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /saved #1 \(screenshot\)/);
+});

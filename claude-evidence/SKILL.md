@@ -24,14 +24,14 @@ Kinds: screenshot, gif, video, test-output, log, diff, note. Files over 15 MB ar
 
 Screenshots shown to you by browser or computer tools are **not on disk**. To get a file:
 - Web page: `npx playwright screenshot --full-page http://localhost:3000 shot.png`
-- Whole screen (Windows): `powershell -NoProfile -Command "Add-Type -A System.Windows.Forms,System.Drawing; $b=[Windows.Forms.Screen]::PrimaryScreen.Bounds; $i=New-Object Drawing.Bitmap $b.Width,$b.Height; [Drawing.Graphics]::FromImage($i).CopyFromScreen(0,0,0,0,$i.Size); $i.Save('shot.png')"`
+- Whole screen (Windows): `evidence capture-screen --caption "…"` captures and saves in one step
 - Anything already saved by a tool (GIF recorder, test reporter, Unity capture): pass its path.
 
 Delete temporary capture files after `add`, because the tool keeps its own copy.
 
 ## Publishing
 
-1. `evidence build` prints `{ page, files, url }`. The page is generated and already meets the Artifact page contract, so publish it as is. Don't load design skills or edit it.
+1. `evidence build` prints `{ page, files, url }`. If your working directory is not the worktree root, the Artifact tool won't accept those paths, so use `evidence build --out <your scratchpad>/evidence` instead. The page is generated and already meets the Artifact page contract, so publish it as is. Don't load design skills or edit it.
 2. If `url` is null: Artifact `publish` with `file_path` = page, `files` = the `files` object exactly as given (even when empty), `icon: "check"`, and a one-sentence `description`.
    If `url` is set: Artifact `read` it first (another session made it), then `publish` with `url`, `file_path` and `files`, and no icon.
 3. `evidence published <url from the Artifact result>`. This records the link and starts the next round, which clears the Stop hook.

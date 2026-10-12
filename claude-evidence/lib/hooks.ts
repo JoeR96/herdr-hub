@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { gitInfo } from "./git.ts";
 import { readPublished, readStore, unpublishedCount } from "./store.ts";
 
-export const TOOL_HINT = "node ~/.claude/evidence/evidence.ts";
+export const TOOL_HINT = `node "${homedir().replace(/\\/g, "/")}/.claude/evidence/evidence.ts"`;
 
 export function sessionStartOutput(cwd: string): object | null {
   const info = gitInfo(cwd);

@@ -6,7 +6,6 @@ import { join, resolve } from "node:path";
 import { install } from "../../claude-evidence/install.ts";
 
 const source = resolve("claude-evidence");
-const node = "C:/Program Files/nodejs/node.exe";
 const herdrHook = { matcher: "^(startup|resume)$", hooks: [{ type: "command", command: "powershell herdr-agent-state.ps1 session", timeout: 10 }] };
 
 function home(settings?: string): string {
@@ -19,7 +18,7 @@ const backups = (h: string) => readdirSync(join(h, ".claude")).filter((f) => f.s
 
 test("fresh install copies the tool, writes the skill and registers both hooks", () => {
   const h = home();
-  const r = install({ home: h, source, node });
+  const r = install({ home: h, source });
   assert.equal(r.settingsChanged, true);
   for (const f of ["evidence.ts", "lib/store.ts", "lib/hooks.ts", "hooks/stop.ts", "hooks/session-start.ts", "package.json"]) {
     assert.ok(existsSync(join(h, ".claude", "evidence", f)), f);
@@ -29,20 +28,20 @@ test("fresh install copies the tool, writes the skill and registers both hooks",
   assert.equal(skill.includes("{{EVIDENCE}}"), false);
   const s = settingsOf(h);
   assert.match(s.hooks.Stop[0].hooks[0].command, /\/\.claude\/evidence\/hooks\/stop\.ts"$/);
-  assert.ok(s.hooks.Stop[0].hooks[0].command.startsWith(`"${node}"`));
+  assert.ok(s.hooks.Stop[0].hooks[0].command.startsWith('node "'), "bare node works in bash, cmd and PowerShell");
   assert.match(s.hooks.SessionStart[0].hooks[0].command, /session-start\.ts"$/);
 });
 
 test("existing hooks and settings are kept, and a re-run changes nothing", () => {
   const h = home(JSON.stringify({ model: "opus", hooks: { SessionStart: [herdrHook] } }, null, 2));
-  assert.equal(install({ home: h, source, node }).settingsChanged, true);
+  assert.equal(install({ home: h, source }).settingsChanged, true);
   const s = settingsOf(h);
   assert.equal(s.model, "opus");
   assert.equal(s.hooks.SessionStart.length, 2);
   assert.deepEqual(s.hooks.SessionStart[0], herdrHook);
   assert.equal(backups(h).length, 1);
 
-  const again = install({ home: h, source, node });
+  const again = install({ home: h, source });
   assert.equal(again.settingsChanged, false);
   assert.equal(settingsOf(h).hooks.SessionStart.length, 2);
   assert.equal(settingsOf(h).hooks.Stop.length, 1);
@@ -51,6 +50,6 @@ test("existing hooks and settings are kept, and a re-run changes nothing", () =>
 
 test("invalid settings.json is refused and left alone", () => {
   const h = home("{ not json");
-  assert.throws(() => install({ home: h, source, node }), /settings\.json/);
+  assert.throws(() => install({ home: h, source }), /settings\.json/);
   assert.equal(readFileSync(join(h, ".claude", "settings.json"), "utf8"), "{ not json");
 });

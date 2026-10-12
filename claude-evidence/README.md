@@ -33,7 +33,8 @@ Each publish updates the same link and starts a new round. Rounds are shown newe
 ```
 evidence add <file|-> [--kind <kind>] --caption "<text>"
 evidence add --kind note --caption "<text>"
-evidence build
+evidence capture-screen --caption "<text>"     (Windows)
+evidence build [--out <folder>]
 evidence published <url>
 evidence status
 ```
