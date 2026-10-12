@@ -22,7 +22,7 @@ test("main space: branch, git state and release each get their own parts", () =>
   assert.deepEqual(strip(t), {
     hub_branch: `${ICON.branch} main`,
     hub_git: "● changes", hub_ahead: "↑2", hub_behind: "↓3",
-    hub_release: `${ICON.release} Release Widgets`, hub_release_state: "✔", hub_release_age: "2d ago",
+    hub_release: `${ICON.release} Release Widgets`, hub_release_state: "✓", hub_release_age: "2d ago",
   });
   assert.ok(t.hub_branch!.startsWith(BLANK.repeat(4)));
 });
@@ -35,8 +35,8 @@ test("worktree space: agent, branch, git, PR with checks, evidence", () => {
   assert.deepEqual(strip(t), {
     hub_agent: `${ICON.agent} stairs fix +1`,
     hub_branch: `${ICON.branch} feature/stairs`,
-    hub_git: "✔ clean",
-    hub_pr: `${ICON.pr} #7 draft`, hub_checks: "✘ checks failed",
+    hub_git: "✓ clean",
+    hub_pr: `${ICON.pr} #7 draft`, hub_checks: "✗ checks failed",
     hub_evidence: `${ICON.evidence} evidence`, hub_evidence_state: "3 to publish",
   });
   assert.ok(t.hub_agent!.startsWith(BLANK.repeat(6)));
@@ -45,9 +45,9 @@ test("worktree space: agent, branch, git, PR with checks, evidence", () => {
 test("check, release and evidence states read as words", () => {
   const wt = { ...base, kind: "worktree" as const };
   const pr = (checks: "success" | "pending" | "none") => buildTokens({ ...wt, pr: { number: 1, title: "", url: "", isDraft: false, headRefName: "", checks } }).hub_checks;
-  assert.deepEqual([pr("success"), pr("pending"), pr("none")], ["✔ checks passed", `${ICON.running} checks running`, "no checks"]);
-  assert.equal(buildTokens({ ...wt, stale: true, pr: { number: 1, title: "", url: "", isDraft: false, headRefName: "", checks: "success" } }).hub_checks, "✔ checks passed · stale");
-  assert.equal(buildTokens({ ...wt, evidence: { url: "u", unpublished: 0 } }).hub_evidence_state, "✔ up to date");
+  assert.deepEqual([pr("success"), pr("pending"), pr("none")], ["✓ checks passed", `${ICON.running} checks running`, "no checks"]);
+  assert.equal(buildTokens({ ...wt, stale: true, pr: { number: 1, title: "", url: "", isDraft: false, headRefName: "", checks: "success" } }).hub_checks, "✓ checks passed · stale");
+  assert.equal(buildTokens({ ...wt, evidence: { url: "u", unpublished: 0 } }).hub_evidence_state, "✓ up to date");
   assert.equal(buildTokens({ ...wt, evidence: null }).hub_evidence, null);
   const rel = buildTokens({ ...base, stale: true, release: { source: "deployment", name: "Production", state: "pending", atMs: now - 60_000, url: null } });
   assert.deepEqual([rel.hub_release_state, rel.hub_release_age], [ICON.running, "1m ago · stale"]);
@@ -92,4 +92,42 @@ test("the release name leaves room for its state and age on the same row", () =>
   const row = [t.hub_release, t.hub_release_state, t.hub_release_age].join(" · ");
   assert.ok(cellWidth(row) <= 40 - 9, `"${row}" is ${cellWidth(row)} cells`);
   assert.ok(t.hub_release2);
+});
+
+test("ticks and crosses use Nerd Font glyphs, which take the row colour (the emoji ✔ does not)", () => {
+  const t = buildTokens({ ...base, kind: "worktree", git: { ...clean, ahead: 0 }, pr: { number: 1, title: "", url: "", isDraft: false, headRefName: "", checks: "success" } });
+  assert.equal(JSON.stringify(t).includes("✔"), false);
+  assert.equal(t.hub_git?.replaceAll(BLANK, ""), `${ICON.ok} clean`);
+});
+
+test("a wrapped release name uses the full row for its second line and is not cut", () => {
+  const t = buildTokens({ ...base, width: 52, stale: true, release: { source: "workflow", name: "Release Big Dave's Bonanza nightly build", state: "pending", atMs: now - 60_000, url: null } });
+  const whole = (t.hub_release! + " " + t.hub_release2!).replaceAll(BLANK, "").replace(`${ICON.release} `, "").replace(/\s+/g, " ");
+  assert.equal(whole, "Release Big Dave's Bonanza nightly build");
+});
+
+test("a row too wide for its two parts moves the second part onto its own line", () => {
+  const pr = { number: 1234, title: "", url: "", isDraft: true, headRefName: "", checks: "failure" as const };
+  const t = buildTokens({ ...base, kind: "worktree", width: 40, pr, evidence: { url: null, unpublished: 12 } });
+  const room = 40 - 13;
+  const row = (...ks: string[]) => ks.map((k) => t[k as keyof typeof t]).filter(Boolean).join(" · ");
+  for (const r of [row("hub_pr", "hub_checks"), row("hub_checks2"), row("hub_evidence", "hub_evidence_state"), row("hub_evidence_state2")]) {
+    assert.ok(cellWidth(r) <= room, `"${r}" is ${cellWidth(r)} cells`);
+  }
+  assert.equal(t.hub_checks, null);
+  assert.match(t.hub_checks2!, /checks failed$/);
+  const stale = buildTokens({ ...base, kind: "worktree", width: 52, stale: true, pr });
+  assert.equal(stale.hub_checks, null);
+  assert.match(stale.hub_checks2!, /checks failed · stale$/);
+  assert.ok(cellWidth(stale.hub_checks2!) <= 52 - 13);
+  assert.equal(t.hub_evidence_state, null);
+  assert.match(t.hub_evidence_state2!, /12 to publish$/);
+  const wide = buildTokens({ ...base, kind: "worktree", width: 52, pr: { ...pr, isDraft: false }, evidence: { url: null, unpublished: 2 } });
+  assert.deepEqual([wide.hub_checks2, wide.hub_evidence_state2], [null, null]);
+});
+
+test("an early / is not used as the break when that would cut the rest", () => {
+  const t = buildTokens({ ...base, kind: "worktree", width: 52, git: { ...clean, branch: "feat/AVeryLongCamelCaseBranchNameWithoutSeparatorsX", ahead: 0 } });
+  const whole = (t.hub_branch! + t.hub_branch2!).replaceAll(BLANK, "").replace(`${ICON.branch} `, "");
+  assert.equal(whole, "feat/AVeryLongCamelCaseBranchNameWithoutSeparatorsX");
 });

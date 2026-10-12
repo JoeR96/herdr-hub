@@ -6,15 +6,16 @@ import { age, cellWidth, cutCells, graphemes } from "./format.ts";
 
 // herdr trims ordinary leading whitespace from token values; U+2800 survives and renders blank.
 export const BLANK = "⠀";
-// Nerd Font glyphs (the Font Awesome / Octicons / Devicons ranges; Material Design ones don't render).
-export const ICON = { agent: "", branch: "", pr: "", release: "", evidence: "", running: "" } as const;
+// Nerd Font glyphs (the Font Awesome / Octicons / Devicons ranges; Material Design ones do not render).
+// ok/fail are plain ✓ ✗: one cell wide and they take the row colour (the emoji ✔ does not).
+export const ICON = { agent: "\uF120", branch: "\uE725", pr: "\uF407", release: "\uF135", evidence: "\uF030", running: "\uF017", ok: "\u2713", fail: "\u2717" } as const;
 
 // Each part is its own token so herdr's config can colour it; rows with no value disappear.
 // The [ui.sidebar.spaces] rows in the README place and colour them.
 export const TOKEN_NAMES = [
   "hub_agent", "hub_agent2", "hub_branch", "hub_branch2", "hub_git", "hub_ahead", "hub_behind",
-  "hub_pr", "hub_checks", "hub_release", "hub_release2", "hub_release_state", "hub_release_age",
-  "hub_evidence", "hub_evidence_state", "hub_problem",
+  "hub_pr", "hub_checks", "hub_checks2", "hub_release", "hub_release2", "hub_release_state", "hub_release_age",
+  "hub_evidence", "hub_evidence_state", "hub_evidence_state2", "hub_problem",
 ] as const;
 export type Tokens = Record<(typeof TOKEN_NAMES)[number], string | null>;
 
@@ -57,30 +58,36 @@ function indentFor(kind: SpaceView["kind"], style: IndentStyle): string {
 }
 
 /**
- * `lead + name` in at most `room` cells, wrapping once onto a second line indented by `cont`.
- * Breaks after a / - _ or space when one fits; only a name too long for two lines is cut.
+ * `lead + name` in at most `room` cells, wrapping once onto a second line (indented by `cont`, `room2` wide).
+ * Breaks after a / - _ or space when that keeps at least half the first line; only a name too long for
+ * two lines is cut.
  */
-function wrap(lead: string, name: string, room: number, cont: string): [string, string | null] {
+function wrap(lead: string, name: string, room: number, cont: string, room2 = room): [string, string | null] {
   if (cellWidth(lead + name) <= room) return [lead + name, null];
   const parts = graphemes(name);
   const avail = room - cellWidth(lead);
-  let used = 0, fits = 0, lastBreak = 0;
+  let used = 0, fits = 0, lastBreak = 0, usedAtBreak = 0;
   for (const p of parts) {
     if (used + p.cells > avail) break;
     used += p.cells;
     fits++;
-    if ("/-_ ".includes(p.text)) lastBreak = fits;
+    if ("/-_ ".includes(p.text)) { lastBreak = fits; usedAtBreak = used; }
   }
-  const at = lastBreak || Math.max(fits, 1);
+  const at = lastBreak && usedAtBreak * 2 >= avail ? lastBreak : Math.max(fits, 1);
   const first = parts.slice(0, at).map((p) => p.text).join("").trimEnd();
   const rest = parts.slice(at).map((p) => p.text).join("").trimStart();
-  return [lead + first, cutCells(cont + rest, room)];
+  return [lead + first, cutCells(cont + rest, room2)];
+}
+
+/** herdr joins a row's tokens with " · "; when `first · second` won't fit, `second` gets its own line. */
+function pair(first: string, second: string, room: number, cont: string): [string | null, string | null] {
+  return cellWidth(`${first} · ${second}`) <= room ? [second, null] : [null, cutCells(cont + second, room)];
 }
 
 const CHECKS: Record<CheckState, string> = {
-  success: "✔ checks passed", failure: "✘ checks failed", pending: `${ICON.running} checks running`, none: "no checks",
+  success: `${ICON.ok} checks passed`, failure: `${ICON.fail} checks failed`, pending: `${ICON.running} checks running`, none: "no checks",
 };
-const STATE: Record<CheckState, string | null> = { success: "✔", failure: "✘", pending: ICON.running, none: null };
+const STATE: Record<CheckState, string | null> = { success: ICON.ok, failure: ICON.fail, pending: ICON.running, none: null };
 
 export function buildTokens(v: SpaceView): Tokens {
   const t = Object.fromEntries(TOKEN_NAMES.map((n) => [n, null])) as Tokens;
@@ -95,18 +102,19 @@ export function buildTokens(v: SpaceView): Tokens {
     [t.hub_agent, t.hub_agent2] = wrap(`${pad}${ICON.agent} `, v.agents[0].title + more, room, cont);
   }
   [t.hub_branch, t.hub_branch2] = wrap(`${pad}${ICON.branch} `, v.git.branch ?? "detached", room, cont);
-  t.hub_git = `${pad}${v.git.dirty ? "● changes" : "✔ clean"}`;
+  t.hub_git = `${pad}${v.git.dirty ? "● changes" : `${ICON.ok} clean`}`;
   t.hub_ahead = v.git.ahead ? `↑${v.git.ahead}` : null;
   t.hub_behind = v.git.behind ? `↓${v.git.behind}` : null;
 
   if (v.kind === "worktree") {
     if (v.pr) {
       t.hub_pr = `${pad}${ICON.pr} #${v.pr.number} ${v.pr.isDraft ? "draft" : "open"}`;
-      t.hub_checks = CHECKS[v.pr.checks] + stale;
+      [t.hub_checks, t.hub_checks2] = pair(t.hub_pr, CHECKS[v.pr.checks] + stale, room, cont);
     }
     if (v.evidence && (v.evidence.url || v.evidence.unpublished)) {
       t.hub_evidence = `${pad}${ICON.evidence} evidence`;
-      t.hub_evidence_state = v.evidence.unpublished ? `${v.evidence.unpublished} to publish` : "✔ up to date";
+      const state = v.evidence.unpublished ? `${v.evidence.unpublished} to publish` : `${ICON.ok} up to date`;
+      [t.hub_evidence_state, t.hub_evidence_state2] = pair(t.hub_evidence, state, room, cont);
     }
   } else {
     if (v.release) {
@@ -114,7 +122,7 @@ export function buildTokens(v: SpaceView): Tokens {
       t.hub_release_age = age(v.release.atMs, v.now) + stale;
       // state and age share the row (herdr joins tokens with " · "), so the name wraps before them
       const after = [t.hub_release_state, t.hub_release_age].filter(Boolean).map((s) => cellWidth(` · ${s}`)).reduce((a, b) => a + b, 0);
-      [t.hub_release, t.hub_release2] = wrap(`${pad}${ICON.release} `, v.release.name, room - after, cont);
+      [t.hub_release, t.hub_release2] = wrap(`${pad}${ICON.release} `, v.release.name, room - after, cont, room);
     }
     if (v.ghProblem) t.hub_problem = `${pad}${v.ghProblem}`;
   }
