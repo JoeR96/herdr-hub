@@ -1,0 +1,55 @@
+id = "herdr-hub"
+name = "herdr hub"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "Pinned project spaces, PR and release status in the sidebar, new worktree + Claude, and workstream cleanup"
+platforms = ["linux", "macos", "windows"]
+
+[[startup]]
+command = ["node", "src/startup.ts"]
+
+[[events]]
+on = "workspace.closed"
+command = ["node", "src/event.ts"]
+
+[[events]]
+on = "workspace.created"
+command = ["node", "src/event.ts"]
+
+[[events]]
+on = "worktree.created"
+command = ["node", "src/event.ts"]
+
+[[actions]]
+id = "refresh"
+title = "herdr hub: refresh now"
+contexts = ["workspace"]
+command = ["node", "src/event.ts", "refresh"]
+
+[[actions]]
+id = "menu"
+title = "herdr hub: menu"
+contexts = ["workspace"]
+command = ["node", "src/open-pane.ts", "menu"]
+
+[[panes]]
+id = "menu"
+title = "herdr hub"
+placement = "popup"
+width = "80%"
+height = 26
+command = ["node", "src/ui/menu.ts"]
+
+[[actions]]
+id = "new-worktree"
+title = "herdr hub: new worktree + Claude"
+contexts = ["workspace"]
+command = ["node", "src/open-pane.ts", "new-worktree"]
+
+[[panes]]
+id = "new-worktree"
+title = "new worktree"
+placement = "popup"
+width = "70%"
+height = 9
+command = ["node", "src/ui/new-worktree.ts"]
