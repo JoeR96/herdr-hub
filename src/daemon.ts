@@ -6,6 +6,7 @@ import { ghStatus, fetchRepoData } from "./io/github.ts";
 import type { GitHubRepo } from "./model/git-parse.ts";
 import type { SpaceKind } from "./model/classify.ts";
 import { buildLines, toTokens } from "./model/lines.ts";
+import { readEvidence } from "./io/evidence.ts";
 import { configDir, loadConfig } from "./config.ts";
 import { acquirePidLock, heartbeat, log, readCache, readPidLock, releasePidLock, statePaths, writeCache } from "./state.ts";
 import { spaceKind } from "./locate.ts";
@@ -81,6 +82,7 @@ async function tick(): Promise<void> {
       release: k.kind === "main" ? entry?.data?.release ?? null : null,
       ghProblem: r ? ghProblem : null,
       stale: !!entry?.error, now, indent: config.indent,
+      evidence: k.kind === "worktree" ? readEvidence(k.folder) : null,
     });
     await herdr.reportTokens(ws.workspace_id, toTokens(lines), ttl);
   }

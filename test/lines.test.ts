@@ -5,7 +5,7 @@ import type { SpaceView } from "../src/model/lines.ts";
 
 const now = Date.parse("2026-10-10T12:00:00Z");
 const clean = { branch: "main", upstream: "origin/main", ahead: 2, behind: 0, dirty: false };
-const base: SpaceView = { kind: "main", git: clean, agents: [], pr: null, release: null, ghProblem: null, stale: false, now, indent: "blank" };
+const base: SpaceView = { kind: "main", git: clean, agents: [], pr: null, release: null, ghProblem: null, stale: false, now, indent: "blank", evidence: null };
 
 test("main space: indented branch line and release line", () => {
   const lines = buildLines({ ...base, release: { source: "workflow", name: "Release Widgets", state: "success", atMs: now - 2 * 86_400_000, url: null } });
@@ -45,4 +45,14 @@ test("no git status and nothing else gives no lines", () => {
 
 test("toTokens fills hub1..hub4 and clears the rest", () => {
   assert.deepEqual(toTokens(["a", "b"]), { hub1: "a", hub2: "b", hub3: null, hub4: null });
+});
+
+test("worktree branch line shows evidence state", () => {
+  const wt = { ...base, kind: "worktree" as const, git: { ...clean, branch: "feature/x", ahead: 0 } };
+  const branch = (evidence: SpaceView["evidence"]) => buildLines({ ...wt, evidence })[0].replaceAll(BLANK, "");
+  assert.equal(branch(null), "feature/x ✓");
+  assert.equal(branch({ url: "https://claude.ai/artifact/a", unpublished: 0 }), "feature/x ✓ · evidence");
+  assert.equal(branch({ url: "https://claude.ai/artifact/a", unpublished: 3 }), "feature/x ✓ · evidence +3");
+  assert.equal(branch({ url: null, unpublished: 2 }), "feature/x ✓ · evidence +2");
+  assert.equal(buildLines({ ...base, evidence: { url: "u", unpublished: 1 } })[0].replaceAll(BLANK, ""), "main ✓ ⇡2");
 });
