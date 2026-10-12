@@ -12,6 +12,7 @@ import { pickFromList, readContext, showMessage } from "./term.ts";
 import { runNewWorktree } from "./new-worktree.ts";
 import { runCleanupUi } from "./cleanup-ui.ts";
 import { runDoctor } from "./doctor.ts";
+import { readEvidence } from "../io/evidence.ts";
 
 const herdr = new Herdr();
 const paths = statePaths();
@@ -22,7 +23,11 @@ if (!ws) { await showMessage("herdr hub", ["Couldn't tell which space is focused
 
 const kind = await spaceKind(ws, snap);
 const { config } = loadConfig(configDir());
-const info: MenuInfo = { kind: kind.kind, prNumber: null, prUrl: null, releaseUrl: null, repoUrl: null, pinned: config.pinned.some((p) => p.label === ws.label) };
+const info: MenuInfo = { kind: kind.kind, prNumber: null, prUrl: null, releaseUrl: null, repoUrl: null, pinned: config.pinned.some((p) => p.label === ws.label), evidenceUrl: null };
+if (kind.kind === "worktree") {
+  const url = readEvidence(kind.folder)?.url;
+  if (url && isWebUrl(url)) info.evidenceUrl = url;
+}
 if (kind.kind !== "other") {
   const repo = await githubRepo(kind.repoRoot);
   if (repo) {
@@ -42,6 +47,7 @@ if (choice.kind !== "select") process.exit(0);
 switch (choice.id) {
   case "new-worktree": await runNewWorktree(ws.workspace_id); break;
   case "open-pr": await openUrl(info.prUrl!); break;
+  case "open-evidence": await openUrl(info.evidenceUrl!); break;
   case "open-release": await openUrl(info.releaseUrl!); break;
   case "open-repo": await openUrl(info.repoUrl!); break;
   case "cleanup": await runCleanupUi(); break;

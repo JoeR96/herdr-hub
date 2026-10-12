@@ -3,6 +3,7 @@ import type { PullRequest } from "./github-map.ts";
 import type { Release } from "./release.ts";
 import { symbol } from "./checks.ts";
 import { age } from "./format.ts";
+import type { EvidenceInfo } from "../io/evidence.ts";
 
 // herdr trims ordinary leading whitespace from token values; U+2800 survives and renders blank.
 export const BLANK = "⠀";
@@ -20,17 +21,19 @@ export interface SpaceView {
   stale: boolean;
   now: number;
   indent: IndentStyle;
+  evidence: EvidenceInfo | null;
 }
 
 function indentFor(kind: SpaceView["kind"], style: IndentStyle): string {
   return style === "bar" ? "│ " : BLANK.repeat(kind === "main" ? 4 : 6);
 }
 
-function branchLine(g: GitStatus | null): string | null {
+function branchLine(g: GitStatus | null, evidence: EvidenceInfo | null = null): string | null {
   if (!g) return null;
   let s = `${g.branch ?? "detached"} ${g.dirty ? "●" : "✓"}`;
   if (g.ahead) s += ` ⇡${g.ahead}`;
   if (g.behind) s += ` ⇣${g.behind}`;
+  if (evidence && (evidence.url || evidence.unpublished)) s += ` · evidence${evidence.unpublished ? ` +${evidence.unpublished}` : ""}`;
   return s;
 }
 
@@ -52,7 +55,7 @@ function agentLine(agents: AgentInfo[]): string | null {
 export function buildLines(v: SpaceView): string[] {
   const raw = v.kind === "main"
     ? [branchLine(v.git), v.release ? releaseLine(v.release, v.now, v.stale) : null, v.ghProblem]
-    : [agentLine(v.agents), branchLine(v.git), v.pr ? prLine(v.pr, v.stale) : null];
+    : [agentLine(v.agents), branchLine(v.git, v.evidence), v.pr ? prLine(v.pr, v.stale) : null];
   const pad = indentFor(v.kind, v.indent);
   return raw.filter((l): l is string => !!l).slice(0, TOKEN_NAMES.length).map((l) => pad + l);
 }
